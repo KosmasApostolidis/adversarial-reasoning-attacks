@@ -1,0 +1,40 @@
+# Main sweep matrix for Phase 2 benchmark.
+# Cells = models x attacks x tasks x epsilons x seeds.
+
+experiment:
+  name: main_benchmark
+  phase: "2"
+  seeds: [0, 1, 2, 3, 4]
+  output_dir: runs/main
+
+  models:
+    - qwen2_5_vl_7b
+    - llava_v1_6_mistral_7b
+    - llama_3_2_vision_11b        # active in Phase 2 only
+
+  tasks:
+    - prostate_mri_workup
+    - rad_vqa_action
+    - prostate_mri_targeted
+    # - workspace_pca_ablation    # internal-only; uncomment for ablation run
+
+  attacks:
+    - pgd_linf
+    - apgd_linf
+    - cw_l2
+    - trajectory_drift_pgd
+    - targeted_tool_pgd
+
+  epsilons_linf: [0.0078, 0.0157, 0.0314, 0.0627]
+
+  statistics:
+    test: wilcoxon_signed_rank
+    bootstrap_resamples: 10000
+    ci_level: 0.95
+    multiple_comparison_correction: benjamini_hochberg
+    bh_q: 0.05
+
+  transfer_evaluation:
+    source: hf_fp16
+    target: ollama_q4
+    same_images: true

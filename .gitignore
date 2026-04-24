@@ -1,0 +1,71 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+.eggs/
+build/
+dist/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+*.egg
+
+# Env
+.env
+.env.local
+.venv/
+venv/
+env/
+
+# Models + caches (HEAVY — never commit)
+.hf_cache/
+.cache/
+weights/
+*.safetensors
+*.gguf
+*.bin
+*.pt
+*.pth
+*.onnx
+
+# Datasets (git-ignored)
+data/
+!data/.gitkeep
+
+# Runs / results (git-ignored)
+runs/
+!runs/.gitkeep
+
+# Paper build artifacts
+paper/*.aux
+paper/*.log
+paper/*.out
+paper/*.bbl
+paper/*.blg
+paper/*.synctex.gz
+paper/*.toc
+paper/_minted-*/
+paper/build/
+
+# Notebooks
+.ipynb_checkpoints/
+*.ipynb_meta
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/

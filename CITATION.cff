@@ -1,0 +1,24 @@
+cff-version: 1.2.0
+message: "If you use this benchmark, please cite it as below."
+title: "Adversarial Reasoning Attacks on Medical Imaging VLM Agents"
+abstract: >-
+  A publication-grade benchmark measuring how white-box image-space adversarial
+  perturbations alter the reasoning trajectories (tool-call sequences, tool
+  parameters, task success) of open-source Vision-Language Model agents in a
+  medical imaging context, with HF fp16 → Ollama Q4 transfer evaluation.
+authors:
+  - family-names: Apostolidis
+    given-names: Kosmas
+    email: cosmasapostolidis@gmail.com
+version: 0.1.0
+date-released: "2026-04-24"
+keywords:
+  - adversarial-attacks
+  - vision-language-models
+  - medical-imaging
+  - agentic-ai
+  - tool-use
+  - benchmark
+license: MIT
+type: software
+repository-code: "https://github.com/KosmasApostolidis/adversarial-reasoning-attacks"

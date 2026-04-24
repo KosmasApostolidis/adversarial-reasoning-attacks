@@ -1,0 +1,55 @@
+# Model registry. Phase-aware: Phase 0/1 uses 2 VLMs, Phase 2 adds Llama-3.2-Vision.
+
+models:
+  qwen2_5_vl_7b:
+    phase: ["0", "1", "2"]
+    family: qwen_vl
+    hf_id: Qwen/Qwen2.5-VL-7B-Instruct
+    hf_revision: main
+    processor_id: Qwen/Qwen2.5-VL-7B-Instruct
+    ollama_tag: qwen2.5vl:7b-q4_K_M
+    torch_dtype: float16
+    device_map: auto
+    tool_calling_mode: native         # native JSON tool-call protocol
+    vision_encoder: ViT
+    params_b: 7
+    disk_fp16_gb: 14
+    disk_ollama_q4_gb: 5
+    chat_template: qwen2_vl
+
+  llava_v1_6_mistral_7b:
+    phase: ["0", "1", "2"]
+    family: llava_next
+    hf_id: llava-hf/llava-v1.6-mistral-7b-hf
+    hf_revision: main
+    processor_id: llava-hf/llava-v1.6-mistral-7b-hf
+    ollama_tag: llava:7b-v1.6-mistral-q4_K_M
+    torch_dtype: float16
+    device_map: auto
+    tool_calling_mode: prompt_scaffold   # ReAct-style via [INST] block
+    vision_encoder: CLIP-ViT-L/14-336
+    params_b: 7
+    disk_fp16_gb: 14
+    disk_ollama_q4_gb: 4
+    chat_template: mistral_instruct
+
+  llama_3_2_vision_11b:
+    phase: ["2"]
+    family: llama_vision
+    hf_id: meta-llama/Llama-3.2-11B-Vision-Instruct
+    hf_revision: main
+    processor_id: meta-llama/Llama-3.2-11B-Vision-Instruct
+    ollama_tag: llama3.2-vision:11b-instruct-q4_K_M
+    torch_dtype: float16
+    device_map: auto
+    tool_calling_mode: prompt_scaffold
+    vision_encoder: cross_attention
+    params_b: 11
+    disk_fp16_gb: 22
+    disk_ollama_q4_gb: 7
+    chat_template: llama_3_vision
+    notes: >-
+      Meta's official tool-use contract is TEXT-ONLY. With vision input,
+      tool-use is prompt-scaffolded (ReAct) only. Expect higher intra-seed
+      trajectory variance than Qwen2.5-VL. Phase 0 noise-floor baseline MUST
+      be measured before this model is included in analysis.

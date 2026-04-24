@@ -1,0 +1,38 @@
+# Smoke run for LLaVA-v1.6-Mistral. Mirror of smoke.yaml with model swap.
+
+experiment:
+  name: smoke_llava
+  phase: "0"
+  seeds: [0]
+  output_dir: runs/smoke_llava
+
+  models:
+    - llava_v1_6_mistral_7b
+
+  tasks:
+    - prostate_mri_workup
+
+  task_overrides:
+    prostate_mri_workup:
+      dataset_split:
+        val: 5
+
+  attacks:
+    - pgd_linf
+
+  attack_overrides:
+    pgd_linf:
+      epsilons: [0.0314]
+      steps: [20]
+      random_restarts: [1]
+
+  statistics:
+    test: wilcoxon_signed_rank
+    bootstrap_resamples: 1000
+    ci_level: 0.95
+    multiple_comparison_correction: none
+
+  transfer_evaluation:
+    source: hf_fp16
+    target: ollama_q4
+    same_images: true

@@ -1,0 +1,64 @@
+# Attack registry. ε sweep, step counts, restart counts, loss choice ablation.
+
+attacks:
+  pgd_linf:
+    impl: adversarial_reasoning.attacks.pgd.PGDAttack
+    norm: linf
+    loss: ce_on_tool_tokens     # target: tool-call token positions
+    targeted: false
+    epsilons: [0.0078, 0.0157, 0.0314, 0.0627]   # 2/255, 4/255, 8/255, 16/255
+    alpha_ratio: 0.25            # step = alpha_ratio * epsilon
+    steps: [10, 40, 100]
+    random_restarts: [1, 5, 10]
+    clip_min: 0.0
+    clip_max: 1.0
+
+  apgd_linf:
+    impl: adversarial_reasoning.attacks.apgd.APGDAttack
+    norm: linf
+    loss: ce_on_tool_tokens
+    targeted: false
+    epsilons: [0.0078, 0.0157, 0.0314, 0.0627]
+    steps: [100]
+    random_restarts: [1]
+    use_ce_loss: true
+    backend: art               # IBM ART AutoProjectedGradientDescent
+
+  cw_l2:
+    impl: adversarial_reasoning.attacks.cw.CWAttack
+    norm: l2
+    loss: margin
+    targeted: true
+    epsilons: [null]             # CW uses c-sweep, not ε
+    c_search_steps: 9
+    steps: [1000]
+    confidence: 0.0
+
+  trajectory_drift_pgd:
+    impl: adversarial_reasoning.attacks.trajectory_drift.TrajectoryDriftPGD
+    norm: linf
+    loss: neg_kl_to_benign_trajectory
+    targeted: false
+    epsilons: [0.0078, 0.0157, 0.0314, 0.0627]
+    steps: [40, 100]
+    random_restarts: [1, 5]
+
+  targeted_tool_pgd:
+    impl: adversarial_reasoning.attacks.targeted_tool.TargetedToolPGD
+    norm: linf
+    loss: ce_force_target_tool
+    targeted: true
+    epsilons: [0.0078, 0.0157, 0.0314, 0.0627]
+    steps: [40, 100]
+    random_restarts: [1, 5]
+    target_tools:
+      - order_biopsy
+      - escalate_to_specialist
+      - request_followup
+    target_step_k: 0             # force target at step k of trajectory
+
+# Loss-choice ablation (applied to PGD primary)
+loss_ablations:
+  - ce_on_tool_tokens
+  - logit_margin
+  - kl_to_target_distribution

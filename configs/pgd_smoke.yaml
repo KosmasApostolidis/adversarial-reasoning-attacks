@@ -1,0 +1,33 @@
+# Real PGD smoke: Qwen, 5 ProstateX samples, ε=8/255, 20 PGD steps.
+
+experiment:
+  name: pgd_smoke
+  phase: "1"
+  seeds: [0]
+  output_dir: runs/pgd_smoke
+
+  models:
+    - qwen2_5_vl_7b
+
+  tasks:
+    - prostate_mri_workup
+
+  task_overrides:
+    prostate_mri_workup:
+      dataset_split:
+        val: 5
+
+  attacks:
+    - pgd_linf
+
+  attack_overrides:
+    pgd_linf:
+      epsilons: [0.0314]   # 8/255 in normalized-pixel domain
+      steps: [20]
+      random_restarts: [1]
+
+  statistics:
+    test: wilcoxon_signed_rank
+    bootstrap_resamples: 1000
+    ci_level: 0.95
+    multiple_comparison_correction: none
