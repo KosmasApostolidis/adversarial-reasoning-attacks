@@ -10,7 +10,8 @@ experiment:
   models:
     - qwen2_5_vl_7b
     - llava_v1_6_mistral_7b
-    - llama_3_2_vision_11b        # active in Phase 2 only
+    # - llama_3_2_vision_11b      # gated: needs HF_TOKEN + Meta license accept
+    #                              re-enable once `huggingface-cli login` is run
 
   tasks:
     - prostate_mri_workup
@@ -21,7 +22,7 @@ experiment:
   attacks:
     - pgd_linf
     - apgd_linf
-    - cw_l2
+    # - cw_l2                     # CWAttack stub removed in Phase-1 refactor; not implemented
     - trajectory_drift_pgd
     - targeted_tool_pgd
 
