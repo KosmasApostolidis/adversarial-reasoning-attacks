@@ -325,6 +325,7 @@ def trajectory_record(t: Trajectory) -> dict:
         "model_id": t.model_id,
         "seed": t.seed,
         "tool_sequence": t.tool_sequence(),
+        "tool_calls": [c.to_dict() for c in t.tool_calls],
         "final_answer": t.final_answer,
         "metadata": t.metadata,
     }
