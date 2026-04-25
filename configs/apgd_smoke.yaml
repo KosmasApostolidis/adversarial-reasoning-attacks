@@ -1,0 +1,32 @@
+# APGD smoke: Qwen, 5 ProstateX samples, ε=8/255, 40 APGD steps (fast validation; sweep uses 100).
+experiment:
+  name: apgd_smoke
+  phase: "1"
+  seeds: [0]
+  output_dir: runs/apgd_smoke
+
+  models:
+    - qwen2_5_vl_7b
+
+  tasks:
+    - prostate_mri_workup
+
+  task_overrides:
+    prostate_mri_workup:
+      dataset_split:
+        val: 5
+
+  attacks:
+    - apgd_linf
+
+  attack_overrides:
+    apgd_linf:
+      epsilons: [0.0314]   # 8/255 in normalized-pixel domain
+      steps: [40]
+      random_restarts: [1]
+
+  statistics:
+    test: wilcoxon_signed_rank
+    bootstrap_resamples: 1000
+    ci_level: 0.95
+    multiple_comparison_correction: none

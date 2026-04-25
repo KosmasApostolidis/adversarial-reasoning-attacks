@@ -29,11 +29,18 @@ from PIL import Image
 
 from .agents.base import Trajectory
 from .agents.medical_agent import MedicalAgent
+from .attacks.apgd import APGDAttack
+from .attacks.base import AttackBase
 from .attacks.pgd import PGDAttack
+from .attacks.targeted_tool import TargetedToolPGD, build_target_tokens
+from .attacks.trajectory_drift import TrajectoryDriftPGD
 from .metrics.trajectory import trajectory_edit_distance
 from .models.loader import load_hf_vlm
 from .tasks.loader import load_task
 from .tools.registry import default_registry
+
+
+GRADIENT_MODES = {"pgd", "apgd", "targeted_tool", "trajectory_drift"}
 
 
 # ----------------------------- config loading -----------------------------
@@ -103,12 +110,47 @@ def perturb(
 ) -> Image.Image:
     if mode == "noise":
         return perturb_noise(image, epsilon, seed)
-    if mode == "pgd":
+    if mode in GRADIENT_MODES:
         raise NotImplementedError(
-            "PGD operates on pre-normalised pixel tensors (not PIL); "
-            "use the dedicated PGD branch in main()."
+            f"{mode} operates on pre-normalised pixel tensors (not PIL); "
+            "use run_gradient_attack in main()."
         )
     raise ValueError(f"Unknown attack mode: {mode}")
+
+
+def build_attack(
+    mode: str,
+    *,
+    epsilon: float,
+    steps: int,
+    target_tool: str = "escalate_to_specialist",
+    target_step_k: int = 0,
+    clip_min: float = -3.0,
+    clip_max: float = 3.0,
+) -> AttackBase:
+    """Construct an attack instance given the runner ``--mode`` value."""
+    if mode == "pgd":
+        return PGDAttack(
+            epsilon=epsilon, steps=steps, random_restarts=1,
+            targeted=False, clip_min=clip_min, clip_max=clip_max,
+        )
+    if mode == "apgd":
+        return APGDAttack(
+            epsilon=epsilon, steps=steps, random_restarts=1,
+            targeted=False, clip_min=clip_min, clip_max=clip_max,
+        )
+    if mode == "targeted_tool":
+        return TargetedToolPGD(
+            epsilon=epsilon, steps=steps, random_restarts=1,
+            target_tool=target_tool, target_step_k=target_step_k,
+            clip_min=clip_min, clip_max=clip_max,
+        )
+    if mode == "trajectory_drift":
+        return TrajectoryDriftPGD(
+            epsilon=epsilon, steps=steps, random_restarts=1,
+            targeted=False, clip_min=clip_min, clip_max=clip_max,
+        )
+    raise ValueError(f"Unknown gradient attack mode: {mode}")
 
 
 def _build_target_tokens(
@@ -123,8 +165,6 @@ def _build_target_tokens(
     around the first benign tool call (or a placeholder if none) and tokenize
     via the model's own tokenizer.
     """
-    import torch
-
     if benign.tool_calls:
         tc = benign.tool_calls[0]
         target_text = (
@@ -141,8 +181,30 @@ def _build_target_tokens(
     return enc["input_ids"].to(prompt_input_ids.device)
 
 
-def run_pgd_attack(
+def _build_trajectory_tokens(
+    vlm: Any,
+    benign: Trajectory,
+    prompt_input_ids: "Any",
+) -> "Any":
+    """Concatenate every benign tool-call block into one teacher-forced target."""
+    if not benign.tool_calls:
+        return _build_target_tokens(vlm, benign, prompt_input_ids)
+    blocks = [
+        "<tool_call>\n"
+        f'{{"name": "{tc.name}", "arguments": {json.dumps(tc.args)}}}'
+        "\n</tool_call>"
+        for tc in benign.tool_calls
+    ]
+    target_text = "\n".join(blocks)
+    enc = vlm.processor.tokenizer(
+        target_text, return_tensors="pt", add_special_tokens=False
+    )
+    return enc["input_ids"].to(prompt_input_ids.device)
+
+
+def run_gradient_attack(
     *,
+    mode: str,
     vlm: Any,
     agent: MedicalAgent,
     sample: Any,
@@ -152,24 +214,30 @@ def run_pgd_attack(
     seed: int,
     max_steps: int,
     task_id: str,
+    target_tool: str = "escalate_to_specialist",
+    target_step_k: int = 0,
 ) -> Trajectory:
-    """Run PGD-L∞ on Qwen-shaped pixel_values, then adversarial inference.
+    """Run a gradient-based attack on Qwen-shaped pixel_values, then adv inference.
+
+    Dispatches by ``mode`` to construct the attack-specific target sequence:
+      - pgd / apgd: benign tool-call (single block) — drop benign likelihood
+      - targeted_tool: forced tool-name block — push targeted likelihood
+      - trajectory_drift: concat of all benign tool-calls — KL ascent
 
     Notes
     -----
-    - ε is applied in the *processor-normalised* pixel domain (not raw uint8).
-      The processor outputs CLIP-normalised pixel_values with std ≈ 0.27, so
-      a pixel-domain ε of 8/255 corresponds to ~0.116 here. We pass ε as-is
-      so the smoke comparison stays apples-to-apples with the noise mode and
-      report this caveat in the paper.
-    - Clip bounds are widened to [-3, 3] which generously covers the
-      normalised range for any natural image after CLIP normalisation.
+    - ε is applied in the *processor-normalised* pixel domain (CLIP std ≈ 0.27),
+      so a pixel-domain ε of 8/255 corresponds to ~0.116 here. Pass-through
+      keeps comparison apples-to-apples with the noise mode.
+    - Clip bounds [-3, 3] generously cover normalised range for natural images.
     """
     import torch
 
+    if mode not in GRADIENT_MODES:
+        raise ValueError(f"Unknown gradient attack mode: {mode}")
     if not hasattr(vlm, "prepare_attack_inputs"):
         raise NotImplementedError(
-            f"{type(vlm).__name__}.prepare_attack_inputs missing — needed for PGD."
+            f"{type(vlm).__name__}.prepare_attack_inputs missing — needed for {mode}."
         )
 
     attack_in = vlm.prepare_attack_inputs(sample.image, sample.prompt)
@@ -178,9 +246,15 @@ def run_pgd_attack(
     prompt_input_ids = attack_in["input_ids"]
     prompt_attn = attack_in.get("attention_mask")
 
-    target_ids = _build_target_tokens(vlm, benign, prompt_input_ids)
+    if mode == "targeted_tool":
+        target_ids = build_target_tokens(
+            vlm, target_tool, device=prompt_input_ids.device
+        )
+    elif mode == "trajectory_drift":
+        target_ids = _build_trajectory_tokens(vlm, benign, prompt_input_ids)
+    else:
+        target_ids = _build_target_tokens(vlm, benign, prompt_input_ids)
 
-    # attention_mask covering [prompt | target]
     if prompt_attn is not None:
         attn_full = torch.cat(
             [prompt_attn, torch.ones_like(target_ids)], dim=-1
@@ -194,15 +268,14 @@ def run_pgd_attack(
     if attn_full is not None:
         fwd_kwargs["attention_mask"] = attn_full
 
-    pgd = PGDAttack(
+    attack = build_attack(
+        mode,
         epsilon=epsilon,
         steps=steps,
-        random_restarts=1,
-        targeted=False,
-        clip_min=-3.0,
-        clip_max=3.0,
+        target_tool=target_tool,
+        target_step_k=target_step_k,
     )
-    res = pgd.run(
+    res = attack.run(
         vlm=vlm,
         image=pixel_values,
         prompt_tokens=prompt_input_ids,
@@ -213,7 +286,6 @@ def run_pgd_attack(
     perturbed_pv = res.perturbed_image
     if perturbed_pv.ndim == pixel_values.ndim - 1:
         perturbed_pv = perturbed_pv.unsqueeze(0)
-    # Match original pixel_values shape (Qwen patchified: collapse leading B if needed)
     if perturbed_pv.shape != pixel_values.shape:
         perturbed_pv = perturbed_pv.view(pixel_values.shape)
 
@@ -226,8 +298,13 @@ def run_pgd_attack(
         seed=seed,
         max_steps=max_steps,
     )
-    attacked.metadata["pgd_loss_final"] = float(res.loss_final)
-    attacked.metadata["pgd_steps"] = int(res.iterations)
+    attacked.metadata[f"{mode}_loss_final"] = float(res.loss_final)
+    attacked.metadata[f"{mode}_steps"] = int(res.iterations)
+    if mode == "targeted_tool":
+        attacked.metadata["target_tool"] = target_tool
+        attacked.metadata["target_step_k"] = int(target_step_k)
+        seq = attacked.tool_sequence()
+        attacked.metadata["targeted_hit"] = int(target_tool in seq)
     return attacked
 
 
@@ -281,12 +358,18 @@ def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(description="Adversarial reasoning runner")
     p.add_argument("--config", required=True, help="Experiment YAML (e.g. configs/smoke.yaml)")
     p.add_argument("--attacks-config", default="configs/attacks.yaml")
-    p.add_argument("--mode", choices=["noise", "pgd"], default="noise")
+    p.add_argument(
+        "--mode",
+        choices=["noise", "pgd", "apgd", "targeted_tool", "trajectory_drift"],
+        default="noise",
+    )
     p.add_argument("--synthetic", action="store_true", help="Skip disk lookup, use synthetic images")
     p.add_argument("--split", default="dev")
     p.add_argument("--out", default=None, help="Override output_dir")
     p.add_argument("--max-steps", type=int, default=8)
-    p.add_argument("--pgd-steps", type=int, default=20, help="PGD inner steps")
+    p.add_argument("--pgd-steps", type=int, default=20, help="Gradient-attack inner steps")
+    p.add_argument("--target-tool", default="escalate_to_specialist", help="targeted_tool target")
+    p.add_argument("--target-step-k", type=int, default=0, help="targeted_tool step index")
     args = p.parse_args(argv)
 
     cfg = load_runner_config(args.config)
@@ -337,8 +420,9 @@ def main(argv: list[str] | None = None) -> int:
                             eps_list = resolve_epsilons(cfg, attack_name, attacks_yaml)
                             for eps in eps_list:
                                 t_start = time.time()
-                                if args.mode == "pgd":
-                                    attacked = run_pgd_attack(
+                                if args.mode in GRADIENT_MODES:
+                                    attacked = run_gradient_attack(
+                                        mode=args.mode,
                                         vlm=vlm,
                                         agent=agent,
                                         sample=sample,
@@ -348,6 +432,8 @@ def main(argv: list[str] | None = None) -> int:
                                         seed=seed,
                                         max_steps=args.max_steps,
                                         task_id=task_id,
+                                        target_tool=args.target_tool,
+                                        target_step_k=args.target_step_k,
                                     )
                                 else:
                                     adv_img = perturb(args.mode, sample.image, eps, seed)
