@@ -21,6 +21,8 @@ import matplotlib.ticker as mticker
 import numpy as np
 from matplotlib.patches import FancyBboxPatch, Rectangle
 
+from _plotlib import despine, load_records, tool_palette
+
 # ── Style ──────────────────────────────────────────────────────────────────
 mpl.rcParams.update(
     {
@@ -51,15 +53,6 @@ OUT = Path("paper/figures/paper")
 OUT.mkdir(parents=True, exist_ok=True)
 
 
-def _load(p: str) -> list[dict]:
-    return [json.loads(l) for l in Path(p).read_text().splitlines() if l.strip()]
-
-
-def _despine(ax: plt.Axes) -> None:
-    ax.spines["top"].set_visible(False)
-    ax.spines["right"].set_visible(False)
-
-
 def _panel_label(ax: plt.Axes, letter: str) -> None:
     ax.text(
         -0.12, 1.08, letter,
@@ -73,9 +66,9 @@ def _panel_label(ax: plt.Axes, letter: str) -> None:
 # ═══════════════════════════════════════════════════════════════════════════
 
 def fig1_main_result() -> None:
-    noise_recs = _load("runs/smoke/records.jsonl")
-    pgd_recs   = _load("runs/pgd_smoke/records.jsonl")
-    sweep_recs = _load("runs/smoke_sweep/records.jsonl")
+    noise_recs = load_records("runs/smoke/records.jsonl")
+    pgd_recs   = load_records("runs/pgd_smoke/records.jsonl")
+    sweep_recs = load_records("runs/smoke_sweep/records.jsonl")
 
     nd  = np.array([r["edit_distance_norm"] for r in noise_recs])
     pd_ = np.array([r["edit_distance_norm"] for r in pgd_recs])
@@ -122,7 +115,7 @@ def fig1_main_result() -> None:
     ax.set_title(f"Attack effectiveness at ε = {eps:.4f}", pad=8)
     ax.set_ylim(bottom=0)
     ax.yaxis.set_minor_locator(mticker.AutoMinorLocator())
-    _despine(ax)
+    despine(ax)
     _panel_label(ax, "A")
 
     # Panel B — per-sample grouped bars
@@ -140,7 +133,7 @@ def fig1_main_result() -> None:
     ax.set_title("Per-patient comparison", pad=8)
     ax.legend(loc="upper left")
     ax.set_ylim(bottom=0)
-    _despine(ax)
+    despine(ax)
     _panel_label(ax, "B")
 
     # Panel C — ε-sweep
@@ -157,7 +150,7 @@ def fig1_main_result() -> None:
     ax.set_xticks([e * 255 for e in eps_sorted])
     ax.set_xticklabels(["2", "4", "8", "16"])
     ax.legend()
-    _despine(ax)
+    despine(ax)
     _panel_label(ax, "C")
 
     fig.suptitle(
@@ -174,12 +167,12 @@ def fig1_main_result() -> None:
 # ═══════════════════════════════════════════════════════════════════════════
 
 def _tool_palette(all_tools: list[str]) -> dict[str, tuple]:
-    return {t: PALETTE20[i % 20] for i, t in enumerate(sorted(all_tools))}
+    return tool_palette(all_tools, sort=True)
 
 
 def fig2_trajectories() -> None:
-    noise_recs = _load("runs/smoke/records.jsonl")
-    pgd_recs   = _load("runs/pgd_smoke/records.jsonl")
+    noise_recs = load_records("runs/smoke/records.jsonl")
+    pgd_recs   = load_records("runs/pgd_smoke/records.jsonl")
 
     # Pick 3 most interesting samples (highest PGD edit distance)
     by_ed = sorted(pgd_recs, key=lambda r: r["edit_distance_norm"], reverse=True)[:3]
@@ -277,7 +270,7 @@ def fig2_trajectories() -> None:
 # ═══════════════════════════════════════════════════════════════════════════
 
 def fig3_tool_heatmap() -> None:
-    pgd_recs = _load("runs/pgd_smoke/records.jsonl")
+    pgd_recs = load_records("runs/pgd_smoke/records.jsonl")
 
     # Collect min-edit alignment: for each sample, align benign → attacked
     # and count (benign_tool, attacked_tool) substitution pairs.
@@ -339,7 +332,7 @@ def fig3_tool_heatmap() -> None:
     ax2.set_xlabel("Count")
     ax2.set_title("Insertions & deletions", pad=8)
     ax2.legend(loc="lower right")
-    _despine(ax2)
+    despine(ax2)
 
     _panel_label(axes[0], "A")
     _panel_label(axes[1], "B")
@@ -355,8 +348,8 @@ def fig3_tool_heatmap() -> None:
 # ═══════════════════════════════════════════════════════════════════════════
 
 def fig4_cross_model() -> None:
-    qwen_recs  = _load("runs/smoke/records.jsonl")
-    llava_recs = _load("runs/smoke_llava/records.jsonl")
+    qwen_recs  = load_records("runs/smoke/records.jsonl")
+    llava_recs = load_records("runs/smoke_llava/records.jsonl")
 
     qd = np.array([r["edit_distance_norm"] for r in qwen_recs])
     ld = np.array([r["edit_distance_norm"] for r in llava_recs])
@@ -386,7 +379,7 @@ def fig4_cross_model() -> None:
         ax.text(xi, arr.max() + 0.07, f"μ={arr.mean():.3f}",
                 ha="center", fontsize=9, color=c, fontweight="bold")
     ax.set_ylim(bottom=0)
-    _despine(ax)
+    despine(ax)
     _panel_label(ax, "A")
 
     # Per-patient grouped bars
@@ -404,7 +397,7 @@ def fig4_cross_model() -> None:
     ax2.set_title("Per-patient cross-model comparison", pad=8)
     ax2.legend()
     ax2.set_ylim(bottom=0)
-    _despine(ax2)
+    despine(ax2)
     _panel_label(ax2, "B")
 
     fig.suptitle(
@@ -421,9 +414,9 @@ def fig4_cross_model() -> None:
 # ═══════════════════════════════════════════════════════════════════════════
 
 def fig5_attack_landscape() -> None:
-    noise_q = _load("runs/smoke/records.jsonl")
-    pgd_q   = _load("runs/pgd_smoke/records.jsonl")
-    noise_l = _load("runs/smoke_llava/records.jsonl")
+    noise_q = load_records("runs/smoke/records.jsonl")
+    pgd_q   = load_records("runs/pgd_smoke/records.jsonl")
+    noise_l = load_records("runs/smoke_llava/records.jsonl")
 
     groups  = [
         ("Qwen\n(noise)", np.array([r["edit_distance_norm"] for r in noise_q]), C_NOISE),
@@ -471,7 +464,7 @@ def fig5_attack_landscape() -> None:
     )
     ax.text(1.5, y_bracket + 0.03, "p < 0.05*", ha="center", fontsize=9, style="italic")
 
-    _despine(ax)
+    despine(ax)
     fig.savefig(OUT / "fig5_attack_landscape.png")
     plt.close(fig)
     print("fig5 ✓")

@@ -24,6 +24,8 @@ import numpy as np
 from matplotlib.colors import LinearSegmentedColormap, to_rgba
 from matplotlib.patches import FancyBboxPatch, Rectangle
 
+from _plotlib import load_records
+
 
 # ── Theme ──────────────────────────────────────────────────────────────────
 BG          = "#0B0F1A"
@@ -81,18 +83,6 @@ mpl.rcParams.update(
         "text.color": TEXT,
     }
 )
-
-
-# ── Data loading ──────────────────────────────────────────────────────────
-def load_records(*paths: str | Path) -> list[dict]:
-    out: list[dict] = []
-    for p in paths:
-        p = Path(p)
-        if not p.exists():
-            continue
-        with p.open("r", encoding="utf-8") as f:
-            out.extend(json.loads(line) for line in f if line.strip())
-    return out
 
 
 def edits(recs):

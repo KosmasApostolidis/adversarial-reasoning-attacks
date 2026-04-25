@@ -61,8 +61,7 @@ OUT = Path("paper/figures/graphs")
 OUT.mkdir(parents=True, exist_ok=True)
 
 
-def _load(p: str) -> list[dict]:
-    return [json.loads(l) for l in Path(p).read_text().splitlines() if l.strip()]
+from _plotlib import load_records as _load  # noqa: E402
 
 
 def _short(t: str) -> str:

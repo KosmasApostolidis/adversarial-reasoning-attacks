@@ -1,4 +1,8 @@
 # Attack registry. ε sweep, step counts, restart counts, loss choice ablation.
+#
+# Anchors: `epsilons` for L∞ attacks reuses `&eps_linf_full` (defined on first
+# use at pgd_linf below). Intra-file only — PyYAML safe_load expands these
+# in-place, so the parsed dict shape is identical to inlined lists.
 
 attacks:
   pgd_linf:
@@ -6,7 +10,7 @@ attacks:
     norm: linf
     loss: ce_on_tool_tokens     # target: tool-call token positions
     targeted: false
-    epsilons: [0.0078, 0.0157, 0.0314, 0.0627]   # 2/255, 4/255, 8/255, 16/255
+    epsilons: &eps_linf_full [0.0078, 0.0157, 0.0314, 0.0627]   # 2/255, 4/255, 8/255, 16/255
     alpha_ratio: 0.25            # step = alpha_ratio * epsilon
     steps: [10, 40, 100]
     random_restarts: [1, 5, 10]
@@ -18,7 +22,7 @@ attacks:
     norm: linf
     loss: ce_on_tool_tokens
     targeted: false
-    epsilons: [0.0078, 0.0157, 0.0314, 0.0627]
+    epsilons: *eps_linf_full
     steps: [100]
     random_restarts: [1]
     use_ce_loss: true
@@ -39,7 +43,7 @@ attacks:
     norm: linf
     loss: neg_kl_to_benign_trajectory
     targeted: false
-    epsilons: [0.0078, 0.0157, 0.0314, 0.0627]
+    epsilons: *eps_linf_full
     steps: [40, 100]
     random_restarts: [1, 5]
 
@@ -48,7 +52,7 @@ attacks:
     norm: linf
     loss: ce_force_target_tool
     targeted: true
-    epsilons: [0.0078, 0.0157, 0.0314, 0.0627]
+    epsilons: *eps_linf_full
     steps: [40, 100]
     random_restarts: [1, 5]
     target_tools:

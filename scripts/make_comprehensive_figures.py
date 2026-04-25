@@ -30,6 +30,8 @@ import numpy as np
 from matplotlib.colors import LinearSegmentedColormap
 from scipy import stats as scipy_stats
 
+from _plotlib import despine, load_records
+
 # ── Output directories ───────────────────────────────────────────────────
 STAT_OUT  = Path("paper/figures/stats")
 GRAPH_OUT = Path("paper/figures/graphs_v2")
@@ -60,13 +62,6 @@ SHORT = {
 def _s(t: str) -> str:
     return SHORT.get(t, t.replace("_", "\n"))
 
-def _load(p: str) -> list[dict]:
-    return [json.loads(l) for l in Path(p).read_text().splitlines() if l.strip()]
-
-def _despine(ax):
-    ax.spines["top"].set_visible(False)
-    ax.spines["right"].set_visible(False)
-
 def _panel(ax, letter, x=-0.13, y=1.07):
     ax.text(x, y, letter, transform=ax.transAxes,
             fontsize=15, fontweight="bold", va="top")
@@ -76,9 +71,9 @@ def _panel(ax, letter, x=-0.13, y=1.07):
 # ═══════════════════════════════════════════════════════════════════════════
 
 def stat1_overview():
-    noise_r  = _load("runs/smoke/records.jsonl")
-    pgd_r    = _load("runs/pgd_smoke/records.jsonl")
-    llava_r  = _load("runs/smoke_llava/records.jsonl")
+    noise_r  = load_records("runs/smoke/records.jsonl")
+    pgd_r    = load_records("runs/pgd_smoke/records.jsonl")
+    llava_r  = load_records("runs/smoke_llava/records.jsonl")
 
     nd  = np.array([r["edit_distance_norm"] for r in noise_r])
     pd_ = np.array([r["edit_distance_norm"] for r in pgd_r])
@@ -113,7 +108,7 @@ def stat1_overview():
     ax.set_xticks([1, 2, 3]); ax.set_xticklabels(labels, fontsize=10)
     ax.set_ylabel("Normalised edit distance"); ax.set_ylim(bottom=0)
     ax.set_title("Edit-distance distribution by condition", pad=8)
-    _despine(ax); _panel(ax, "A")
+    despine(ax); _panel(ax, "A")
 
     # ── B: Scatter — benign length vs edit distance ────────────────────
     ax = axes[0, 1]
@@ -133,7 +128,7 @@ def stat1_overview():
     ax.set_xlabel("Benign trajectory length (steps)")
     ax.set_ylabel("Normalised edit distance")
     ax.set_title("Benign length vs attack drift", pad=8)
-    ax.legend(fontsize=9); _despine(ax); _panel(ax, "B")
+    ax.legend(fontsize=9); despine(ax); _panel(ax, "B")
 
     # ── C: Correlation matrix ──────────────────────────────────────────
     ax = axes[1, 0]
@@ -194,7 +189,7 @@ def stat1_overview():
     ax.set_xticklabels([_s(t) for t in all_tools], fontsize=8.5)
     ax.set_ylabel("Total invocations (all patients)")
     ax.set_title("Tool invocation frequency by condition", pad=8)
-    ax.legend(fontsize=9); _despine(ax); _panel(ax, "D")
+    ax.legend(fontsize=9); despine(ax); _panel(ax, "D")
 
     fig.suptitle("Comprehensive statistical overview of adversarial attack effects",
                  fontsize=14, fontweight="bold", y=1.01)
@@ -208,8 +203,8 @@ def stat1_overview():
 # ═══════════════════════════════════════════════════════════════════════════
 
 def stat2_epsilon_sweep():
-    sweep = _load("runs/smoke_sweep/records.jsonl")
-    pgd_r = _load("runs/pgd_smoke/records.jsonl")
+    sweep = load_records("runs/smoke_sweep/records.jsonl")
+    pgd_r = load_records("runs/pgd_smoke/records.jsonl")
 
     eps_vals = sorted(set(r["epsilon"] for r in sweep))
     per_eps: dict[float, list] = defaultdict(list)
@@ -247,11 +242,11 @@ def stat2_epsilon_sweep():
     ax.set_title("Dose–response: uniform noise (ε sweep)", pad=8)
     ax.set_xticks([e*255 for e in eps_vals])
     ax.set_xticklabels(["2/255", "4/255", "8/255", "16/255"])
-    ax.legend(fontsize=9); _despine(ax); _panel(ax, "A")
+    ax.legend(fontsize=9); despine(ax); _panel(ax, "A")
 
     # ── B: Attack mode comparison bar with individual points ──────────
     ax = axes[1]
-    noise_r = _load("runs/smoke/records.jsonl")
+    noise_r = load_records("runs/smoke/records.jsonl")
     nd  = [r["edit_distance_norm"] for r in noise_r]
     pd_ = [r["edit_distance_norm"] for r in pgd_r]
     groups = [("Uniform\nNoise", nd, C_NOISE), ("PGD-L∞\n20 steps", pd_, C_PGD)]
@@ -273,7 +268,7 @@ def stat2_epsilon_sweep():
     ax.set_xticks(xs); ax.set_xticklabels(["Uniform\nNoise", "PGD-L∞\n20 steps"], fontsize=11)
     ax.set_ylabel("Normalised edit distance", fontsize=11)
     ax.set_title(f"Attack effectiveness at ε=0.0314 (8/255)\nQwen2.5-VL-7B, n=5 patients", pad=8)
-    ax.set_ylim(bottom=0); _despine(ax); _panel(ax, "B")
+    ax.set_ylim(bottom=0); despine(ax); _panel(ax, "B")
 
     fig.suptitle("ε-sweep dose–response and attack mode comparison",
                  fontsize=13, fontweight="bold", y=1.02)
@@ -287,10 +282,10 @@ def stat2_epsilon_sweep():
 # ═══════════════════════════════════════════════════════════════════════════
 
 def stat3_trajectory_lengths():
-    noise_r = _load("runs/smoke/records.jsonl")
-    pgd_r   = _load("runs/pgd_smoke/records.jsonl")
-    llava_r = _load("runs/smoke_llava/records.jsonl")
-    sweep   = _load("runs/smoke_sweep/records.jsonl")
+    noise_r = load_records("runs/smoke/records.jsonl")
+    pgd_r   = load_records("runs/pgd_smoke/records.jsonl")
+    llava_r = load_records("runs/smoke_llava/records.jsonl")
+    sweep   = load_records("runs/smoke_sweep/records.jsonl")
 
     fig, axes = plt.subplots(1, 3, figsize=(15, 5))
     fig.subplots_adjust(wspace=0.35)
@@ -309,7 +304,7 @@ def stat3_trajectory_lengths():
         ax.hist(vals, bins=bins, alpha=0.45, color=c, edgecolor=c, lw=1.2, label=label)
     ax.set_xlabel("Trajectory length (steps)"); ax.set_ylabel("Count")
     ax.set_title("Trajectory length distribution", pad=8)
-    ax.legend(fontsize=8); _despine(ax); _panel(ax, "A")
+    ax.legend(fontsize=8); despine(ax); _panel(ax, "A")
 
     # ── B: CDF ────────────────────────────────────────────────────────
     ax = axes[1]
@@ -319,7 +314,7 @@ def stat3_trajectory_lengths():
         ax.step(s, y, color=c, lw=2, label=label)
     ax.set_xlabel("Trajectory length (steps)"); ax.set_ylabel("Cumulative fraction")
     ax.set_title("CDF of trajectory lengths", pad=8)
-    ax.legend(fontsize=8); ax.set_ylim(0, 1.05); _despine(ax); _panel(ax, "B")
+    ax.legend(fontsize=8); ax.set_ylim(0, 1.05); despine(ax); _panel(ax, "B")
 
     # ── C: Scatter — benign len vs attacked len (noise vs PGD) ────────
     ax = axes[2]
@@ -334,7 +329,7 @@ def stat3_trajectory_lengths():
     ax.plot([0, lim], [0, lim], "k--", lw=1.2, alpha=0.4, label="b_len = a_len")
     ax.set_xlabel("Benign trajectory length"); ax.set_ylabel("Attacked trajectory length")
     ax.set_title("Length before vs after attack", pad=8)
-    ax.legend(fontsize=9); _despine(ax); _panel(ax, "C")
+    ax.legend(fontsize=9); despine(ax); _panel(ax, "C")
 
     fig.suptitle("Trajectory length analysis: how attacks shorten/extend reasoning chains",
                  fontsize=13, fontweight="bold", y=1.02)
@@ -348,8 +343,8 @@ def stat3_trajectory_lengths():
 # ═══════════════════════════════════════════════════════════════════════════
 
 def stat4_step_heatmap():
-    noise_r = _load("runs/smoke/records.jsonl")
-    pgd_r   = _load("runs/pgd_smoke/records.jsonl")
+    noise_r = load_records("runs/smoke/records.jsonl")
+    pgd_r   = load_records("runs/pgd_smoke/records.jsonl")
 
     all_tools = sorted({
         t for r in pgd_r + noise_r
@@ -416,7 +411,7 @@ def _dark_ax(ax):
 # ═══════════════════════════════════════════════════════════════════════════
 
 def graph6_bipartite():
-    pgd_r = _load("runs/pgd_smoke/records.jsonl")
+    pgd_r = load_records("runs/pgd_smoke/records.jsonl")
     n     = len(pgd_r)
 
     fig, axes = plt.subplots(1, n, figsize=(4 * n, 7))
@@ -494,7 +489,7 @@ def graph6_bipartite():
 # ═══════════════════════════════════════════════════════════════════════════
 
 def graph7_divergence():
-    pgd_r = _load("runs/pgd_smoke/records.jsonl")
+    pgd_r = load_records("runs/pgd_smoke/records.jsonl")
 
     fig, axes = plt.subplots(1, len(pgd_r), figsize=(4.5 * len(pgd_r), 7))
     fig.patch.set_facecolor(DARK_BG)
@@ -571,8 +566,8 @@ def graph7_divergence():
 # ═══════════════════════════════════════════════════════════════════════════
 
 def graph8_tool_influence():
-    pgd_r   = _load("runs/pgd_smoke/records.jsonl")
-    noise_r = _load("runs/smoke/records.jsonl")
+    pgd_r   = load_records("runs/pgd_smoke/records.jsonl")
+    noise_r = load_records("runs/smoke/records.jsonl")
 
     all_tools = sorted({
         t for r in pgd_r + noise_r
@@ -678,7 +673,7 @@ def graph8_tool_influence():
 # ═══════════════════════════════════════════════════════════════════════════
 
 def graph9_layered_flow():
-    pgd_r = _load("runs/pgd_smoke/records.jsonl")
+    pgd_r = load_records("runs/pgd_smoke/records.jsonl")
 
     all_tools = sorted({
         t for r in pgd_r
@@ -746,8 +741,8 @@ def graph9_layered_flow():
 # ═══════════════════════════════════════════════════════════════════════════
 
 def graph10_step_occupancy():
-    noise_r = _load("runs/smoke/records.jsonl")
-    pgd_r   = _load("runs/pgd_smoke/records.jsonl")
+    noise_r = load_records("runs/smoke/records.jsonl")
+    pgd_r   = load_records("runs/pgd_smoke/records.jsonl")
 
     all_tools = sorted({
         t for r in pgd_r + noise_r

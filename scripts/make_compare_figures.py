@@ -10,8 +10,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 
-def _load(p: Path) -> list[dict]:
-    return [json.loads(l) for l in p.read_text().splitlines() if l.strip()]
+from _plotlib import load_records as _load  # noqa: E402
 
 
 def main() -> int:

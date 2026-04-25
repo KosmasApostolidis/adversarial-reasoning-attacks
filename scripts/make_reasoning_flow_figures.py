@@ -45,8 +45,7 @@ SHORT = {
 }
 def _s(t): return SHORT.get(t, t.replace("_", " "))
 
-def _load(p):
-    return [json.loads(l) for l in Path(p).read_text().splitlines() if l.strip()]
+from _plotlib import load_records as _load  # noqa: E402
 
 def _dark_fig(w, h):
     fig = plt.figure(figsize=(w, h))

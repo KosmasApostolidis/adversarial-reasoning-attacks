@@ -177,14 +177,66 @@ def targeted_hit_rate(records_by_attack: dict[str, list[dict]], out_path: Path) 
     return rate
 
 
+def _pgd_noise_compare(noise_path: Path, pgd_path: Path, out_dir: Path) -> int:
+    """Boxplot of PGD vs uniform-noise edit-distance at matched ε."""
+    out_dir.mkdir(parents=True, exist_ok=True)
+    noise = _load_records(noise_path)
+    pgd = _load_records(pgd_path)
+    nd = np.array([r["edit_distance_norm"] for r in noise])
+    pd_ = np.array([r["edit_distance_norm"] for r in pgd])
+    eps = pgd[0]["epsilon"]
+
+    fig, ax = plt.subplots(figsize=(7, 4.5))
+    bp = ax.boxplot(
+        [nd, pd_],
+        labels=["uniform noise", "PGD-L∞ (20 steps)"],
+        patch_artist=True,
+        widths=0.5,
+    )
+    bp["boxes"][0].set_facecolor("#888888")
+    bp["boxes"][1].set_facecolor("#c62828")
+    ax.set_ylabel("normalized trajectory edit distance", fontsize=11)
+    ax.set_title(
+        f"PGD vs noise on Qwen2.5-VL-7B at ε={eps:.4f} (n={len(pd_)})",
+        fontsize=11,
+    )
+    ax.grid(axis="y", linestyle=":", alpha=0.4)
+    for i, (_label, arr) in enumerate([("noise", nd), ("PGD", pd_)], start=1):
+        ax.text(i, max(arr.max(), 0.05) + 0.04,
+                f"mean={arr.mean():.3f}", ha="center", fontsize=10)
+    plt.tight_layout()
+    fig.savefig(out_dir / "pgd_vs_noise_box.png", dpi=140)
+    plt.close(fig)
+
+    print(f"[compare_attacks pgd_noise] noise mean={nd.mean():.3f}  "
+          f"PGD mean={pd_.mean():.3f}  Δ={pd_.mean()-nd.mean():+.3f}")
+    print(f"[compare_attacks pgd_noise] wrote → {out_dir}")
+    return 0
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument(
-        "--runs", nargs="+", required=True,
-        help="One or more 'name=path' entries (path may be dir or records.jsonl).",
+        "--mode", choices=["default", "pgd_noise"], default="default",
+        help="default: N-attack aggregate. pgd_noise: PGD-vs-noise boxplot.",
     )
-    ap.add_argument("--out", default="paper/figures/attack_comparison")
+    ap.add_argument(
+        "--runs", nargs="+",
+        help="[default mode] One or more 'name=path' entries (dir or records.jsonl).",
+    )
+    ap.add_argument("--noise", help="[pgd_noise mode] records.jsonl from noise run.")
+    ap.add_argument("--pgd", help="[pgd_noise mode] records.jsonl from PGD run.")
+    ap.add_argument("--out", default=None)
     args = ap.parse_args()
+
+    if args.mode == "pgd_noise":
+        if not (args.noise and args.pgd):
+            ap.error("--noise and --pgd are required for --mode pgd_noise")
+        out_dir = Path(args.out or "paper/figures/pgd_vs_noise")
+        return _pgd_noise_compare(Path(args.noise), Path(args.pgd), out_dir)
+
+    if not args.runs:
+        ap.error("--runs is required for --mode default")
 
     paths = _parse_runs(args.runs)
     records_by_attack = {name: _load_records(p) for name, p in paths.items()}
@@ -193,7 +245,7 @@ def main() -> int:
         for name, recs in records_by_attack.items()
     }
 
-    out_dir = Path(args.out)
+    out_dir = Path(args.out or "paper/figures/attack_comparison")
     out_dir.mkdir(parents=True, exist_ok=True)
 
     boxplot(edit_by_attack, out_dir / "edit_distance_box.png")

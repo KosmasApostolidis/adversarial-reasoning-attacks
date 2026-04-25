@@ -65,15 +65,7 @@ LABELS = {
 ATTACK_ORDER = ["noise", "pgd", "apgd", "targeted_tool", "trajectory_drift"]
 
 
-def load_records(*paths: str | Path) -> list[dict]:
-    out: list[dict] = []
-    for p in paths:
-        p = Path(p)
-        if not p.exists():
-            continue
-        with p.open("r", encoding="utf-8") as f:
-            out.extend(json.loads(line) for line in f if line.strip())
-    return out
+from _plotlib import load_records  # noqa: E402
 
 
 def bootstrap_ci(values: np.ndarray, n_boot: int = 2000, alpha: float = 0.05, seed: int = 0) -> tuple[float, float]:

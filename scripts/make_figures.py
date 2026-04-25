@@ -30,9 +30,7 @@ import numpy as np
 from matplotlib.patches import Rectangle
 from PIL import Image
 
-
-def _load_records(jsonl_path: Path) -> list[dict[str, Any]]:
-    return [json.loads(l) for l in jsonl_path.read_text().splitlines() if l.strip()]
+from _plotlib import load_records, tool_palette
 
 
 def _load_gate(path: Path) -> dict[str, Any] | None:
@@ -216,11 +214,6 @@ def fig_attack_panel(
     plt.close(fig)
 
 
-def make_palette(tools: list[str]) -> dict[str, Any]:
-    cmap = plt.get_cmap("tab20")
-    return {t: cmap(i % 20) for i, t in enumerate(tools)}
-
-
 def main() -> int:
     p = argparse.ArgumentParser()
     p.add_argument("--records", required=True, help="Path to records.jsonl")
@@ -229,7 +222,7 @@ def main() -> int:
     p.add_argument("--task", default="prostate_mri_workup")
     args = p.parse_args()
 
-    records = _load_records(Path(args.records))
+    records = load_records(Path(args.records))
     if not records:
         print("[make_figures] no records")
         return 1
@@ -239,7 +232,7 @@ def main() -> int:
     nf = _load_gate(Path(args.noise_floor)) if args.noise_floor else None
     noise_thr = float(nf["threshold_for_signal"]) if nf else 0.0
 
-    palette = make_palette(_unique_tools(records))
+    palette = tool_palette(_unique_tools(records))
     model_key = records[0]["model_key"]
 
     fig_edit_distance_distribution(records, noise_thr, out_dir / f"edit_distance_distribution_{model_key}.png")
