@@ -14,6 +14,70 @@ We ask: **does an ε-bounded perturbation of the input image alone systematicall
 
 Phase 0 (sanity gates) + Phase 1 (full attack suite, ε × seed sweeps) are complete. Phase 2 (defenses, transfer to closed APIs) is future work.
 
+Existing work on adversarial perturbations of VLMs targets the *next-token output* (forced-string image hijacks, jailbreak compliance). Existing work on attacking tool-using LLM agents operates through the *text channel* (prompt injection, memory poisoning, tool-description tampering). Existing work on medical-VLM robustness measures *classification or retrieval accuracy* on single-shot inference. No prior thread targets the **tool-call trajectory of a medical VLM agent under pixel-bounded gradient perturbation** — the threat model when a clinician uploads an image to a tool-using assistant. This work lives at that intersection.
+
+---
+
+## 1.5 Related work and threat-model positioning
+
+The literature relevant to this report splits into three threads. We summarize each, then state precisely what each thread does *not* cover, which is where this work sits.
+
+### 1.5.1 Adversarial attacks on VLMs (image channel)
+
+| Work | What it does | What it does *not* do |
+|---|---|---|
+| Bagdasaryan et al. 2023 (*Abusing Images and Sounds for Indirect Instruction Injection*); Schlarmann & Hein 2023 (*On the Adversarial Robustness of Multi-Modal Foundation Models*, ICCV-W) | force VLM to emit attacker-chosen string from a captioning prompt | trajectory-level multi-step output |
+| Carlini et al. 2023 (*Are aligned neural networks adversarially aligned?*); Qi et al. 2023 (*Visual Adversarial Examples Jailbreak Aligned LLMs*, AAAI 2024) | visual jailbreaks of aligned VLMs | tool-using agent setting |
+| Bailey et al. 2024 (*Image Hijacks: Adversarial Images can Control Generative Models at Runtime*, ICML) | runtime control via specific-string / jailbreak / leak-context image hijacks | multi-tool reasoning loop |
+| AdvDiffVLM, AdvCLIP, AdvEncoder, GAP | universal / transferable image perturbations against VLM encoders | task-specific tool-trajectory targeting |
+| Schlarmann et al. 2024 (*RobustVLM*, ICML) | unsupervised adversarial fine-tuning of vision encoders (defense) | (defense-side, complementary to our work) |
+| Liu et al. 2024 (ACM Computing Surveys 2024); *Awesome-LVLM-Attack* | survey + curated reading list | — |
+
+**Limitation w.r.t. our work.** All of the above target the *single-utterance output* of the VLM (a string the attacker dictates, or refusal-bypass behaviour), not the multi-step tool-call sequence emitted by an agent loop. Their gradient signal is over the next token; ours is over a *trajectory* of tool invocations spanning up to 8 ReAct steps.
+
+### 1.5.2 Adversarial attacks on tool-using LLM agents (text channel)
+
+| Work | Channel | Target |
+|---|---|---|
+| Greshake et al. 2023 (*Not what you've signed up for*) | indirect prompt injection | text |
+| AgentDojo (Debenedetti et al. 2024); InjecAgent (Zhan et al. 2024); BadAgent (Wang et al. 2024) | prompt / memory / tool-description injection | text |
+| ASB — Agent Security Bench (Zhang et al., ICLR 2025) | DPI / IPI / memory-poisoning / Plan-of-Thought backdoor | text |
+| AgentHarm (Andriushchenko et al., ICLR 2025) | harmful-task benchmark for tool-using agents | text |
+| Foot-in-the-Door on ReAct (Oct 2024); *From Allies to Adversaries* (Dec 2024) | adversarial tool-call injection through prompt or tool registry | text |
+| Wu et al. 2025 (*Dissecting Adversarial Robustness of Multimodal LM Agents*, ICLR 2025; `agent-attack`) | multimodal LM agents on general web-navigation tasks | image+text, web agents |
+
+**Limitation w.r.t. our work.** These attacks inject through the **text** channel — the attacker controls some prompt, memory entry, or tool description. Our attack is **pixel-only**, ε-bounded in raw image space, and assumes no text-channel access. Wu et al. 2025 (`agent-attack`) is the closest neighbour but targets general web-navigation agents (e.g. VisualWebArena), not clinical tool-using agents, and uses task-success rate rather than trajectory edit-distance as the metric. Their threat model also permits modifying both image and text inputs; ours fixes the prompt.
+
+### 1.5.3 Adversarial robustness in medical VLMs
+
+| Work | Setup | Metric |
+|---|---|---|
+| Finlayson et al. 2019 (*Adversarial attacks on medical machine learning*, Science) | classification CNNs on dermoscopy / fundus / chest X-ray | clean→adversarial accuracy drop |
+| CARES (May 2025, arXiv 2505.11413) | clinical safety benchmark — 18k prompts across 8 safety principles | harmful content / jailbreak / false-refusal rate |
+| CoDA (chain-of-distribution) | clinical pipeline-shift framework with plausible perturbations | task accuracy under shift |
+| PromptSmooth++ (MICCAI 2025) | randomized-smoothing certified robustness for frozen Med-VLMs | certified L2 radius |
+| MFHA (Sci. Rep. 2025) | multimodal feature-heterogeneity attack | transferability + diagnostic-tool framing |
+| Federated Med-VLM vulnerabilities (Nat. Sci. Rep. 2026) | federated-training threat model | classification accuracy |
+| *On the Robustness of Medical VLMs* (Springer 2025) | generalization under domain shift across MIMIC / CheXpert / NIH | retrieval / classification accuracy |
+| *Robustness in deep learning models for medical diagnostics* (AI Review, Springer 2024) | survey | — |
+
+**Limitation w.r.t. our work.** These measure single-shot classification / retrieval / corruption robustness on a fixed task. None of them treat the model as an agent that emits a *tool-call trajectory*, and none measure trajectory edit-distance.
+
+### 1.5.4 The gap this work targets
+
+Our combination is, to our knowledge, novel. The contribution lives at the intersection of three threads, which is unoccupied:
+
+| Dimension | This work |
+|---|---|
+| Input channel | ε-bounded gradient perturbation of pixel input only (no text-channel access) |
+| Target system | Tool-using medical VLM agent (ReAct loop, deterministic clinical tools) |
+| Attack objective | Trajectory disruption — *which* tool is invoked and *in what order* |
+| Primary metric | Normalized tool-name edit distance; targeted-hit rate as secondary |
+| Scope | Cross-model parity (Qwen2.5-VL-7B vs LLaVA-v1.6-Mistral-7B) under identical ε convention |
+| Threat model | "Attacker controls the uploaded image, not the system prompt or the tool registry" — realistic for a clinical upload portal |
+
+Restating: prior image-channel VLM attacks (§1.5.1) optimise next-token output but ignore the agent loop; prior agent attacks (§1.5.2) require text-channel access and ignore pixel-space gradients; prior Med-VLM robustness work (§1.5.3) measures classification accuracy and ignores tool trajectories. No prior thread covers all three. This work treats the tool-call sequence itself as the adversary's optimisation target, under the most restrictive (pixel-only) input channel, on a clinically-shaped task surface.
+
 ---
 
 ## 2. System under test
@@ -236,6 +300,7 @@ All randomness funnels through `torch.manual_seed(seed)` + `numpy.random.seed(se
 - **Tool semantics matter as much as token IDs.** Two trajectories with different tool *names* but the same *clinical effect* score as different by edit-distance. A semantic equivalence layer is on the wishlist.
 - **Closed-API transfer** (Ollama-Q4 transfer evaluation) is wired but not yet run at sweep scale.
 - **C&W L2 attack** is scaffolded but not in production sweeps.
+- **No defense baselines yet.** Phase 2 will compare against published Med-VLM defenses — RobustVLM (Schlarmann et al. 2024, adversarially fine-tuned vision encoder), PromptSmooth++ (MICCAI 2025, certified robustness via randomized smoothing), and input-purification (DiffPure, JPEG re-encoding, random-resize-and-pad). The current report measures *attack* strength only and does not yet bound the residual risk after a defense layer.
 
 ---
 
