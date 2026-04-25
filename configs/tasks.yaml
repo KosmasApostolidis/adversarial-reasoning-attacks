@@ -6,9 +6,18 @@ tasks:
     modality: MRI
     dataset: prostatex_bhi
     dataset_split:
-      dev: 50
-      test: 50
-      val: 55
+      train: 55     # fold_1 val: 55 patients
+      dev: 54       # fold_2 val: 54 patients
+      test: 54      # fold_3 val: 54 patients
+      val: 55       # backward-compat: same as train
+    # BHI cv_folds are patient-disjoint by construction. Each fold has only
+    # filesystem split "val" on disk — we map our logical splits onto folds
+    # so train/dev/test are clinically credible (zero patient leakage).
+    bhi_split_to_fold:
+      train: 1
+      dev: 2
+      test: 3
+      val: 1
     prompt_template: |
       You are a radiology agent. Given this prostate MRI (T2, ADC, DWI panel),
       decide whether to: (a) order a biopsy, (b) request follow-up imaging,

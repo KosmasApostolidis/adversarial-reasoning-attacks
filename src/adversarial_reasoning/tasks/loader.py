@@ -109,9 +109,22 @@ def _load_prostatex_bhi(
     return out
 
 
-def _dataset_images(dataset: str, split: str, n: int | None) -> list[tuple[str, Image.Image]]:
+_BHI_DEFAULT_SPLIT_TO_FOLD = {"train": 1, "dev": 2, "test": 3, "val": 1}
+
+
+def _dataset_images(
+    dataset: str,
+    split: str,
+    n: int | None,
+    *,
+    cfg: dict | None = None,
+) -> list[tuple[str, Image.Image]]:
     if dataset == "prostatex_bhi":
-        return _load_prostatex_bhi(split=split, n=n)
+        bhi_map = (cfg or {}).get("bhi_split_to_fold", _BHI_DEFAULT_SPLIT_TO_FOLD)
+        fold = int(bhi_map.get(split, 1))
+        # All BHI logical splits read from filesystem split "val"; the
+        # fold differentiates patient cohorts.
+        return _load_prostatex_bhi(split="val", n=n, fold=fold)
     # Default file-based lookup.
     files = _iter_split_files(_resolve_image_dir(dataset, split))
     return [(p.stem, Image.open(p).convert("RGB")) for p in files[: n or len(files)]]
@@ -144,7 +157,7 @@ def load_task(
     if synthetic:
         real: list[tuple[str, Image.Image]] = []
     else:
-        real = _dataset_images(dataset, split, count)
+        real = _dataset_images(dataset, split, count, cfg=cfg)
 
     for i in range(count):
         if i < len(real):
