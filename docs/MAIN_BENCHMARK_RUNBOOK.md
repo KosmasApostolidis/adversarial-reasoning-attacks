@@ -157,14 +157,17 @@ loads on this GPU and produces a sensible forward pass. This catches
 HF_TOKEN, license, processor-cache, and dtype/device misconfigurations
 in ~30 s instead of 12 h into the sweep.
 
+3-model variant (default) — runs the full sanity loop:
+
 ```bash
 python - <<'PY'
 from PIL import Image
 import numpy as np
 from adversarial_reasoning.models.loader import load_hf_vlm
 
-# Run for every model you intend to sweep.  3-model default:
-for name in ("qwen2_5_vl_7b", "llava_v1_6_mistral_7b", "llama_3_2_vision_11b"):
+MODELS = ("qwen2_5_vl_7b", "llava_v1_6_mistral_7b", "llama_3_2_vision_11b")
+
+for name in MODELS:
     print(f"[smoke-load] {name} ...", flush=True)
     vlm = load_hf_vlm(name)
     img = Image.fromarray((np.random.rand(224, 224, 3) * 255).astype("uint8"))
@@ -172,6 +175,10 @@ for name in ("qwen2_5_vl_7b", "llava_v1_6_mistral_7b", "llama_3_2_vision_11b"):
     print(f"  ok  out={out!r}")
 PY
 ```
+
+2-model variant — drop `llama_3_2_vision_11b` from the `MODELS` tuple
+above (replace the line with
+`MODELS = ("qwen2_5_vl_7b", "llava_v1_6_mistral_7b")`).
 
 Each model should print `ok  out=<some short text>`. Any
 `OSError`, `GatedRepoError`, `OutOfMemoryError`, or
@@ -257,18 +264,28 @@ Skip this entire section to run the 2-model variant.
 
 ```bash
 # Starts noise → pgd → apgd → trajectory_drift → targeted_tool, in that
-# order.  Logs are tee'd to runs/main/_logs/<mode>_<utc-timestamp>.log
-# nohup + & lets you log out without killing the run.
-nohup scripts/run_main_benchmark.sh > runs/main/_logs/_driver.out 2>&1 &
-echo $!  # remember the PID; this is what to kill if you need to abort.
+# order.  Logs are tee'd to runs/main/_logs/<mode>_<utc-timestamp>.log.
+# Defaults are spelled out so this exact line is the canonical Phase-2 launch:
+mkdir -p runs/main/_logs
+PGD_STEPS=20 SPLIT=dev MAX_STEPS=8 \
+  nohup scripts/run_main_benchmark.sh > runs/main/_logs/_driver.out 2>&1 &
+echo $! > runs/main/_logs/_driver.pid    # PID is also written to disk for §7
+cat runs/main/_logs/_driver.pid          # echoes the PID for your records
 ```
 
 Total elapsed: ~13 GPU-days continuous on a free H200 (2-model), ~40 with
 all 3 models. Expect ~2× wall-time under contention. Tail any leg from
-another shell:
+another shell — pick whichever mode is currently running:
 
 ```bash
-tail -f runs/main/_logs/<mode>_*.log
+tail -f runs/main/_logs/noise_*.log
+tail -f runs/main/_logs/pgd_*.log
+tail -f runs/main/_logs/apgd_*.log
+tail -f runs/main/_logs/trajectory_drift_*.log
+tail -f runs/main/_logs/targeted_tool_*.log
+
+# Or follow the driver's own stdout (which round-robins across legs):
+tail -f runs/main/_logs/_driver.out
 ```
 
 ### 2.3 Reduced sample-count variant
@@ -314,14 +331,23 @@ scripts/run_main_benchmark.sh noise
 
 ### 2.5 Tunables  (env vars to `run_main_benchmark.sh`)
 
+Three env vars control the runner; defaults are `PGD_STEPS=20`,
+`SPLIT=dev`, `MAX_STEPS=8`. Examples:
+
 ```bash
-PGD_STEPS=100  scripts/run_main_benchmark.sh apgd                # 100-step inner loop
-SPLIT=test     scripts/run_main_benchmark.sh                     # use test split
-MAX_STEPS=12   scripts/run_main_benchmark.sh trajectory_drift    # longer agent trajectory
+# Strong APGD with 100-step inner loop, all 5 modes still on dev split:
+PGD_STEPS=100 SPLIT=dev MAX_STEPS=8 scripts/run_main_benchmark.sh apgd
+
+# Switch to the test split for the held-out final evaluation:
+PGD_STEPS=20  SPLIT=test MAX_STEPS=8 scripts/run_main_benchmark.sh
+
+# Longer agent trajectory (12 steps) for the trajectory-drift attack:
+PGD_STEPS=20  SPLIT=dev  MAX_STEPS=12 scripts/run_main_benchmark.sh trajectory_drift
 ```
 
-Defaults from `scripts/run_main_benchmark.sh`: `PGD_STEPS=20`,
-`SPLIT=dev`, `MAX_STEPS=8`.
+The runner CLI itself accepts the same knobs as flags
+(`--pgd-steps`, `--split`, `--max-steps`); the env-var prefix is just
+the driver's way of passing them through.
 
 ### 2.6 Verify Phase-2 done
 
@@ -348,12 +374,19 @@ mode without cleanup will produce duplicate rows; aggregation code
 deduplicates on `(model, task, attack, ε, seed, sample_id)` but it is
 safer to wipe and relaunch.
 
-Safe recovery:
+Safe recovery — pick the failed mode and run the matching pair:
 
 ```bash
-# Clean a single failed leg and relaunch only that mode:
-rm -rf runs/main/<mode>/
-scripts/run_main_benchmark.sh <mode>
+# noise:
+rm -rf runs/main/noise/             && scripts/run_main_benchmark.sh noise
+# pgd:
+rm -rf runs/main/pgd/               && scripts/run_main_benchmark.sh pgd
+# apgd:
+rm -rf runs/main/apgd/              && scripts/run_main_benchmark.sh apgd
+# trajectory_drift:
+rm -rf runs/main/trajectory_drift/  && scripts/run_main_benchmark.sh trajectory_drift
+# targeted_tool:
+rm -rf runs/main/targeted_tool/     && scripts/run_main_benchmark.sh targeted_tool
 ```
 
 There is no checkpointing inside a leg. A crash mid-leg loses progress
@@ -437,22 +470,75 @@ Phase-1 paths (`runs/smoke/`, `runs/pgd_smoke/`, `runs/smoke_sweep/`,
 Phase-2 will silently regenerate the paper PNGs from Phase-1 sample data
 and overwrite `paper/figures/paper/fig{1..5}_*.png` with stale content.
 
-> **Required fix before regenerating figures:** rewrite the
-> `load_records(...)` calls in the four monoliths
-> (`scripts/make_paper_figures.py`, `scripts/make_hero_figures.py`,
-> `scripts/make_attack_landscape.py`, `scripts/make_comprehensive_figures.py`)
-> so each attack mode reads from `runs/main/<mode>/records.jsonl` (or
-> filters a single concatenated JSONL by the `attack` field). Until that
-> patch lands, treat the existing PNGs in `paper/figures/paper/` as
-> Phase-1 placeholders, not paper outputs.
-
-After the path fix:
+**Required fix before regenerating figures.** The four figure monoliths
+each pin attack-specific JSONL paths. The minimum patch is to point
+every per-attack `load_records(...)` call at the matching
+`runs/main/<mode>/records.jsonl`. The exact substitutions to apply:
 
 ```bash
+# Audit the current Phase-1 paths (gives you the list of lines to fix):
+grep -nE 'runs/(smoke|pgd_smoke|apgd_smoke|apgd_sweep|targeted_tool_smoke|targeted_tool_sweep|trajectory_drift_smoke|trajectory_drift_sweep|smoke_sweep|smoke_llava)/records\.jsonl' \
+  scripts/make_paper_figures.py \
+  scripts/make_hero_figures.py \
+  scripts/make_attack_landscape.py \
+  scripts/make_comprehensive_figures.py
+
+# Mechanical mapping (apply via your editor or sed -i):
+#   runs/smoke/records.jsonl                 → runs/main/noise/records.jsonl
+#   runs/smoke_sweep/records.jsonl           → runs/main/noise/records.jsonl
+#   runs/smoke_llava/records.jsonl           → runs/main/noise/records.jsonl   (filter on model in script)
+#   runs/pgd_smoke/records.jsonl             → runs/main/pgd/records.jsonl
+#   runs/apgd_smoke/records.jsonl            → runs/main/apgd/records.jsonl
+#   runs/apgd_sweep/records.jsonl            → runs/main/apgd/records.jsonl
+#   runs/targeted_tool_smoke/records.jsonl   → runs/main/targeted_tool/records.jsonl
+#   runs/targeted_tool_sweep/records.jsonl   → runs/main/targeted_tool/records.jsonl
+#   runs/trajectory_drift_smoke/records.jsonl → runs/main/trajectory_drift/records.jsonl
+#   runs/trajectory_drift_sweep/records.jsonl → runs/main/trajectory_drift/records.jsonl
+```
+
+Reference sed for the simple cases (run from repo root, on each script):
+
+```bash
+for f in scripts/make_paper_figures.py scripts/make_hero_figures.py \
+         scripts/make_attack_landscape.py scripts/make_comprehensive_figures.py; do
+  sed -i \
+    -e 's|runs/smoke/records\.jsonl|runs/main/noise/records.jsonl|g' \
+    -e 's|runs/smoke_sweep/records\.jsonl|runs/main/noise/records.jsonl|g' \
+    -e 's|runs/smoke_llava/records\.jsonl|runs/main/noise/records.jsonl|g' \
+    -e 's|runs/pgd_smoke/records\.jsonl|runs/main/pgd/records.jsonl|g' \
+    -e 's|runs/apgd_smoke/records\.jsonl|runs/main/apgd/records.jsonl|g' \
+    -e 's|runs/apgd_sweep/records\.jsonl|runs/main/apgd/records.jsonl|g' \
+    -e 's|runs/targeted_tool_smoke/records\.jsonl|runs/main/targeted_tool/records.jsonl|g' \
+    -e 's|runs/targeted_tool_sweep/records\.jsonl|runs/main/targeted_tool/records.jsonl|g' \
+    -e 's|runs/trajectory_drift_smoke/records\.jsonl|runs/main/trajectory_drift/records.jsonl|g' \
+    -e 's|runs/trajectory_drift_sweep/records\.jsonl|runs/main/trajectory_drift/records.jsonl|g' \
+    "$f"
+done
+
+# Verify the audit grep above now returns 0 hits:
+grep -cE 'runs/(smoke|pgd_smoke|apgd_(smoke|sweep)|targeted_tool_(smoke|sweep)|trajectory_drift_(smoke|sweep)|smoke_sweep|smoke_llava)/records\.jsonl' \
+  scripts/make_paper_figures.py \
+  scripts/make_hero_figures.py \
+  scripts/make_attack_landscape.py \
+  scripts/make_comprehensive_figures.py
+# expected output: each path with count 0
+```
+
+The `smoke_llava` case is special: it filters by model rather than
+attack; collapsing it to the noise leg works because Phase-2's
+`runs/main/noise/records.jsonl` already includes both Qwen and LLaVA
+rows, but the script must still split by model when plotting. Skim the
+diff for any `if model == "llava"` branch and confirm it still resolves.
+
+After the path fix runs cleanly:
+
+```bash
+# Regenerate every paper figure suite in one command:
 make figures
-# = adreason-figures paper          → paper/figures/paper/fig{1..5}_*.png
-#   adreason-figures hero           → paper/figures/hero/*.png
-#   adreason-figures attack-landscape → paper/figures/attack_landscape/*.png
+# expanded form:
+adreason-figures paper             # paper/figures/paper/fig{1..5}_*.png
+adreason-figures hero              # paper/figures/hero/*.png
+adreason-figures attack-landscape  # paper/figures/attack_landscape/*.png
 ```
 
 `adreason-figures` is the console-script defined in `pyproject.toml` and
@@ -543,17 +629,25 @@ mtime. Each entry lists the section that produces it.
 ## 7. Abort / cleanup
 
 ```bash
-# stop the driver:
-kill <PID-from-step-2.2>
+# Stop the driver (PID was written to disk by §2.2):
+kill "$(cat runs/main/_logs/_driver.pid)" 2>/dev/null || true
 
-# and any python child it spawned:
+# Belt-and-braces: kill any orphaned driver shell + python child:
+pkill -f 'scripts/run_main_benchmark.sh'
 pkill -f 'adversarial_reasoning.runner'
 
-# nuke partial run output (does NOT touch published Phase-1 sweeps):
-rm -rf runs/main/<mode>/                                         # specific leg only
-rm -rf runs/main/_logs/                                          # log archive only
+# Nuke partial run output for one leg (pick whichever you ran):
+rm -rf runs/main/noise/
+rm -rf runs/main/pgd/
+rm -rf runs/main/apgd/
+rm -rf runs/main/trajectory_drift/
+rm -rf runs/main/targeted_tool/
 
-# nuke everything Phase-2 (use with care — wipes all main_benchmark output):
+# Or wipe just the log archive (keeps the records.jsonl files):
+rm -rf runs/main/_logs/
+
+# Nuke everything Phase-2 in one go (use with care — wipes ALL
+# main_benchmark output including completed legs):
 rm -rf runs/main/
 ```
 
