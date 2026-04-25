@@ -85,8 +85,14 @@ dev = [
 [project.urls]
 Homepage = "https://github.com/KosmasApostolidis/adversarial-reasoning-attacks"
 
+[project.scripts]
+adreason = "adversarial_reasoning.runner:main"
+adreason-figures = "scripts.cli:main"
+adreason-compare = "scripts.compare_attacks:main"
+
 [tool.setuptools.packages.find]
-where = ["src"]
+where = ["src", "."]
+include = ["adversarial_reasoning*", "scripts*"]
 
 [tool.setuptools.package-data]
 adversarial_reasoning = ["py.typed"]
@@ -125,4 +131,5 @@ markers = [
     "slow: marks tests as slow (GPU/model loading)",
     "gpu: marks tests that require a CUDA GPU",
     "smoke: marks tests as smoke tests (quick sanity)",
+    "integration: marks tests that hit live external services or full pipeline",
 ]

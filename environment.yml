@@ -1,0 +1,42 @@
+name: adversarial-reasoning
+channels:
+  - pytorch
+  - nvidia
+  - conda-forge
+dependencies:
+  - python=3.11
+  - pip
+  # System libraries (faster from conda than pip wheels)
+  - numpy>=1.26
+  - scipy>=1.13
+  - pandas>=2.2
+  - scikit-learn>=1.5
+  - statsmodels>=0.14
+  - matplotlib>=3.8
+  - seaborn>=0.13
+  - pillow>=10.0
+  - opencv>=4.9
+  - pyyaml>=6.0
+  - tqdm>=4.66
+  - rich>=13.7
+  # Medical imaging IO
+  - pydicom>=3.0
+  - nibabel>=5.2
+  - simpleitk>=2.3
+  # PyTorch (CUDA-aware build from pytorch channel)
+  - pytorch>=2.6
+  - pytorch-cuda=12.4
+  - torchvision
+  # Pip-only deps (no conda-forge build or version-pinned to wheels)
+  - pip:
+      - transformers>=4.45
+      - accelerate>=1.1
+      - bitsandbytes>=0.43
+      - safetensors>=0.4
+      - adversarial-robustness-toolbox>=1.20
+      - smolagents>=1.4
+      - ollama>=0.4
+      - datasets>=3.0
+      - tenacity>=9.0
+      - python-Levenshtein>=0.25
+      - -e .[dev]
