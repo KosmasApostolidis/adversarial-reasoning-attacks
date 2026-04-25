@@ -33,6 +33,26 @@ models:
     disk_ollama_q4_gb: 4
     chat_template: mistral_instruct
 
+  defended_qwen2_5_vl_7b:
+    phase: ["1", "2"]
+    family: qwen_vl
+    # Local HF dir produced by adversarial-reasoning-training/scripts/ckpt_to_hf_dir.py
+    # from runs/adv1_qwen/ckpt/weights_only.pt (epoch-1 adv-FT, TRADES β=6.0, ε=2/255).
+    hf_id: /home/medadmin/kosmasapostolidis/adversarial-reasoning-training/runs/adv1_qwen/ckpt/hf_dir
+    hf_revision: main
+    processor_id: /home/medadmin/kosmasapostolidis/adversarial-reasoning-training/runs/adv1_qwen/ckpt/hf_dir
+    torch_dtype: float16
+    device_map: auto
+    tool_calling_mode: native
+    vision_encoder: ViT
+    params_b: 7
+    disk_fp16_gb: 16
+    chat_template: qwen2_vl
+    notes: >-
+      Defended adv-FT epoch-1 checkpoint. Paired-defended model_key against
+      the undefended qwen2_5_vl_7b for T3 robust-eval. Re-export via
+      ckpt_to_hf_dir.py whenever a new defended checkpoint is produced.
+
   llama_3_2_vision_11b:
     phase: ["2"]
     family: llama_vision
