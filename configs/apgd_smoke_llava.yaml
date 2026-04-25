@@ -1,0 +1,32 @@
+# APGD smoke (LLaVA): 5 ProstateX samples, ε=8/255, 40 APGD steps. Parity with apgd_smoke.yaml.
+experiment:
+  name: apgd_smoke_llava
+  phase: "1"
+  seeds: [0]
+  output_dir: runs/apgd_smoke_llava
+
+  models:
+    - llava_v1_6_mistral_7b
+
+  tasks:
+    - prostate_mri_workup
+
+  task_overrides:
+    prostate_mri_workup:
+      dataset_split:
+        val: 5
+
+  attacks:
+    - apgd_linf
+
+  attack_overrides:
+    apgd_linf:
+      epsilons: [0.0314]
+      steps: [40]
+      random_restarts: [1]
+
+  statistics:
+    test: wilcoxon_signed_rank
+    bootstrap_resamples: 1000
+    ci_level: 0.95
+    multiple_comparison_correction: none
