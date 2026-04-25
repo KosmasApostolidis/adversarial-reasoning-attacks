@@ -123,10 +123,10 @@ class QwenVL(VLMBase):
     def generate_from_pixel_values(
         self,
         pixel_values: torch.Tensor,
-        image_grid_thw: torch.Tensor,
         prompt: str,
         *,
         template_image: Image.Image,
+        image_grid_thw: torch.Tensor,
         max_new_tokens: int = 512,
         temperature: float = 0.0,
         seed: int | None = None,

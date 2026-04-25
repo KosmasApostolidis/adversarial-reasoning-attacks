@@ -91,13 +91,18 @@ class MedicalAgent(AgentBase):
         self,
         task_id: str,
         pixel_values: "torch.Tensor",
-        image_grid_thw: "torch.Tensor",
         prompt: str,
         *,
         template_image: Image.Image,
         seed: int = 0,
         max_steps: int = 8,
+        gen_kwargs: dict[str, Any] | None = None,
     ) -> Trajectory:
+        # gen_kwargs: model-specific extras forwarded to vlm.generate_from_pixel_values
+        # via **spread (e.g. {"image_grid_thw": ...} for Qwen, {"image_sizes": ...}
+        # for LLaVA-Next). Must not contain keys already used by the explicit signature
+        # of generate_from_pixel_values (pixel_values, prompt, template_image,
+        # temperature, seed, tools_schema, max_new_tokens) or Python raises TypeError.
         """Variant of `run` for adversarial inference: pixel_values fixed across steps.
 
         PGD optimises `pixel_values` directly; we sidestep the image processor
@@ -128,16 +133,17 @@ class MedicalAgent(AgentBase):
             "After tool calls return, you may emit a plain-text conclusion.\n\n"
         )
         running_prompt = forcing + prompt
+        gen_extras = dict(gen_kwargs or {})
         for step in range(max_steps):
             result = self.vlm.generate_from_pixel_values(
                 pixel_values=pixel_values,
-                image_grid_thw=image_grid_thw,
                 prompt=running_prompt,
                 template_image=template_image,
                 temperature=0.0,
                 seed=seed + step,
                 tools_schema=tool_schema,
                 max_new_tokens=512,
+                **gen_extras,
             )
             trajectory.reasoning_trace += f"\n--- step {step} ---\n{result.text}\n"
 

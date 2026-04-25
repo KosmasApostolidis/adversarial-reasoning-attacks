@@ -117,6 +117,56 @@ class LlavaNext(VLMBase):
         )
         return outputs.logits
 
+    def generate_from_pixel_values(
+        self,
+        pixel_values: torch.Tensor,
+        prompt: str,
+        *,
+        template_image: Image.Image,
+        image_sizes: torch.Tensor | None = None,
+        max_new_tokens: int = 512,
+        temperature: float = 0.0,
+        seed: int | None = None,
+        tools_schema: list[dict] | None = None,
+    ) -> VLMGenerateResult:
+        """Bypass image processor — feed pre-prepared (perturbed) pixel_values.
+
+        Mirrors the Qwen counterpart: re-tokenize prompt via processor (so
+        ``<image>`` placeholder count matches the anyres tile layout), then
+        substitute the perturbed ``pixel_values`` and ``image_sizes`` into
+        ``model.generate``.
+        """
+        if seed is not None:
+            torch.manual_seed(seed)
+
+        chat_prompt = self._format_prompt(prompt, tools_schema)
+        proc_inputs = self.processor(
+            text=chat_prompt, images=template_image, return_tensors="pt"
+        ).to(self.model.device)
+
+        gen_image_sizes = (
+            image_sizes
+            if image_sizes is not None
+            else proc_inputs.get("image_sizes")
+        )
+
+        with torch.no_grad():
+            out = self.model.generate(
+                pixel_values=pixel_values,
+                image_sizes=gen_image_sizes,
+                input_ids=proc_inputs["input_ids"],
+                attention_mask=proc_inputs["attention_mask"],
+                max_new_tokens=max_new_tokens,
+                do_sample=temperature > 0.0,
+                temperature=max(temperature, 1e-5),
+                return_dict_in_generate=True,
+                output_scores=False,
+            )
+
+        gen_ids = out.sequences[0, proc_inputs["input_ids"].shape[1] :]
+        text_out = self.processor.decode(gen_ids, skip_special_tokens=True)
+        return VLMGenerateResult(text=text_out, finish_reason="stop")
+
     def prepare_attack_inputs(
         self,
         image: Image.Image,

@@ -243,6 +243,7 @@ def run_gradient_attack(
     attack_in = vlm.prepare_attack_inputs(sample.image, sample.prompt)
     pixel_values = attack_in["pixel_values"]
     image_grid_thw = attack_in.get("image_grid_thw")
+    image_sizes = attack_in.get("image_sizes")
     prompt_input_ids = attack_in["input_ids"]
     prompt_attn = attack_in.get("attention_mask")
 
@@ -265,6 +266,8 @@ def run_gradient_attack(
     fwd_kwargs: dict[str, Any] = {}
     if image_grid_thw is not None:
         fwd_kwargs["image_grid_thw"] = image_grid_thw
+    if image_sizes is not None:
+        fwd_kwargs["image_sizes"] = image_sizes
     if attn_full is not None:
         fwd_kwargs["attention_mask"] = attn_full
 
@@ -289,14 +292,19 @@ def run_gradient_attack(
     if perturbed_pv.shape != pixel_values.shape:
         perturbed_pv = perturbed_pv.view(pixel_values.shape)
 
+    gen_kwargs: dict[str, Any] = {}
+    if image_grid_thw is not None:
+        gen_kwargs["image_grid_thw"] = image_grid_thw
+    if image_sizes is not None:
+        gen_kwargs["image_sizes"] = image_sizes
     attacked = agent.run_with_pixel_values(
         task_id=task_id,
         pixel_values=perturbed_pv.to(pixel_values.dtype),
-        image_grid_thw=image_grid_thw,
         prompt=sample.prompt,
         template_image=sample.image,
         seed=seed,
         max_steps=max_steps,
+        gen_kwargs=gen_kwargs,
     )
     attacked.metadata[f"{mode}_loss_final"] = float(res.loss_final)
     attacked.metadata[f"{mode}_steps"] = int(res.iterations)
