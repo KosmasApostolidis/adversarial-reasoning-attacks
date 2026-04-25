@@ -10,7 +10,7 @@ attacks:
     norm: linf
     loss: ce_on_tool_tokens     # target: tool-call token positions
     targeted: false
-    epsilons: &eps_linf_full [0.0078, 0.0157, 0.0314, 0.0627]   # 2/255, 4/255, 8/255, 16/255
+    epsilons: &eps_linf_full [0.0078, 0.0157, 0.0314, 0.0627, 0.1254]   # 2/255, 4/255, 8/255, 16/255, 32/255
     alpha_ratio: 0.25            # step = alpha_ratio * epsilon
     steps: [10, 40, 100]
     random_restarts: [1, 5, 10]
@@ -24,7 +24,7 @@ attacks:
     targeted: false
     epsilons: *eps_linf_full
     steps: [100]
-    random_restarts: [1]
+    random_restarts: [3, 5, 10]
     use_ce_loss: true
     backend: art               # IBM ART AutoProjectedGradientDescent
 
