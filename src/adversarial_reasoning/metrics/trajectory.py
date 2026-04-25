@@ -1,4 +1,28 @@
-"""Primary trajectory-divergence metrics (untargeted + targeted attack outcomes)."""
+"""Primary trajectory-divergence metrics for untargeted + targeted attacks.
+
+This module is the single source of truth for the *outcome-side* metrics
+in :mod:`adversarial_reasoning.runner` and the figure scripts under
+``scripts/``. None of these helpers care how a perturbation was produced
+— they operate purely on the resulting tool-call sequences.
+
+Public functions
+----------------
+- :func:`trajectory_edit_distance` — normalised Levenshtein on tool-name
+  lists; the headline untargeted-attack metric used in
+  ``records.jsonl`` rows (``edit_distance_norm`` field).
+- :func:`flip_rate_at_step` — pointwise mismatch at step ``k``; useful
+  for evaluating forced-step targeted attacks.
+- :func:`targeted_hit_rate` — global or step-locked hit-rate; the
+  headline targeted-attack metric used in the cross-model figures.
+- :func:`param_l1_distance` — perturbation budget on tool *arguments*,
+  not just tool names; complements edit-distance when an attack flips
+  args without flipping the tool itself.
+
+The optional ``python-Levenshtein`` import accelerates pairwise edit
+distance ~10× on long sequences; the pure-numpy fallback in
+:func:`_levenshtein_dp` matches behaviour exactly so output is
+deterministic across both code paths.
+"""
 
 from __future__ import annotations
 

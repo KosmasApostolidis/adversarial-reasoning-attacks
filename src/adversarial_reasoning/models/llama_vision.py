@@ -8,11 +8,12 @@ model contributes to analysis.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 import torch
 from PIL import Image
 
+from ..types import AttackInputs
 from .base import VLMBase, VLMGenerateResult
 
 
@@ -130,7 +131,7 @@ class LlamaVision(VLMBase):
         image: Image.Image,
         prompt: str,
         tools_schema: list[dict] | None = None,
-    ) -> dict[str, Any]:
+    ) -> AttackInputs:
         """Precompute MLlama-specific inputs for attack forward passes."""
         system_prompt = self._build_system_prompt(tools_schema)
         messages = [
@@ -145,4 +146,4 @@ class LlamaVision(VLMBase):
         ]
         text = self.processor.apply_chat_template(messages, add_generation_prompt=True)
         inputs = self.processor(image, text, return_tensors="pt").to(self.model.device)
-        return dict(inputs)
+        return cast(AttackInputs, dict(inputs))

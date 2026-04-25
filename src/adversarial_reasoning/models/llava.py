@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 import torch
 from PIL import Image
 
+from ..types import AttackInputs
 from .base import VLMBase, VLMGenerateResult
 
 
@@ -172,7 +173,7 @@ class LlavaNext(VLMBase):
         image: Image.Image,
         prompt: str,
         tools_schema: list[dict] | None = None,
-    ) -> dict[str, Any]:
+    ) -> AttackInputs:
         """Tokenize prompt + preprocess image into tensors ready for attack.
 
         Returns dict with `pixel_values`, `input_ids`, `attention_mask`, `image_sizes`.
@@ -181,11 +182,11 @@ class LlavaNext(VLMBase):
         inputs = self.processor(text=chat_prompt, images=image, return_tensors="pt").to(
             self.model.device
         )
-        out = {
+        out: dict[str, Any] = {
             "pixel_values": inputs["pixel_values"],
             "input_ids": inputs["input_ids"],
             "attention_mask": inputs["attention_mask"],
         }
         if "image_sizes" in inputs:
             out["image_sizes"] = inputs["image_sizes"]
-        return out
+        return cast(AttackInputs, out)

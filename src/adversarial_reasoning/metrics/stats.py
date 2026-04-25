@@ -1,8 +1,28 @@
-"""Statistical testing + multiple-comparison correction."""
+"""Statistical testing + multiple-comparison correction.
+
+These helpers wrap ``scipy.stats`` with consistent return shapes
+(immutable dataclasses) and add a dependency-free Benjamini-Hochberg
+implementation. The figure scripts call them when comparing benign vs
+attacked metrics across paired samples.
+
+Public functions
+----------------
+- :func:`wilcoxon_signed_rank` — paired test on (benign, attacked)
+  metric arrays; the per-attack significance test used in the
+  comparison figures.
+- :func:`bootstrap_ci` — percentile bootstrap CI on mean / median /
+  std; used in the ε-sweep error-band plots.
+- :func:`benjamini_hochberg` — step-up FDR control across a family of
+  p-values (one per (attack, eps) combination).
+
+All returns are :class:`dataclasses.dataclass(frozen=True)` so they can
+be hashed, cached, and serialised without surprises.
+"""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Any
 
 import numpy as np
 from scipy import stats
@@ -62,7 +82,11 @@ def bootstrap_ci(
         raise ValueError("sample must be 1-D")
 
     rng = np.random.default_rng(rng_seed)
-    stat_fn = {"mean": np.mean, "median": np.median, "std": np.std}[statistic]
+    stat_fn: Any = {
+        "mean": np.mean,
+        "median": np.median,
+        "std": np.std,
+    }[statistic]
     n = arr.size
     stats_resampled = np.empty(n_resamples, dtype=float)
     for i in range(n_resamples):

@@ -2,15 +2,17 @@
 
 Loss: CE forcing the target tool-name token sequence into the position
 ``target_step_k`` of the trajectory. Reuses :class:`PGDAttack` with
-``targeted=True``; this module only handles target-token construction.
+``targeted=True``; this module only handles tagging the result with the
+target-tool metadata so downstream metrics can group by it.
 
-The caller is expected to pass ``target`` already tokenized. To build it
-from a tool-name string + step index, use :func:`build_target_tokens`.
+Refactor (2026-04-25): the ``build_target_tokens`` helper moved to
+:mod:`adversarial_reasoning.attacks.targets`; we re-export it here for
+back-compat with ``runner.py`` and any external scripts that imported
+``from .attacks.targeted_tool import build_target_tokens``.
 """
 
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass
 from typing import Any
 
@@ -18,27 +20,9 @@ import torch
 
 from .base import AttackBase, AttackResult
 from .pgd import PGDAttack
+from .targets import build_target_tokens
 
-
-def build_target_tokens(
-    vlm: Any,
-    target_tool: str,
-    target_args: dict | None = None,
-    *,
-    device: torch.device | str | None = None,
-) -> torch.Tensor:
-    """Tokenize a Qwen-style tool-call block forcing ``target_tool``."""
-    args_json = json.dumps(target_args or {})
-    target_text = (
-        "<tool_call>\n"
-        f'{{"name": "{target_tool}", "arguments": {args_json}}}'
-        "\n</tool_call>"
-    )
-    enc = vlm.processor.tokenizer(
-        target_text, return_tensors="pt", add_special_tokens=False
-    )
-    ids = enc["input_ids"]
-    return ids.to(device) if device is not None else ids
+__all__ = ["TargetedToolPGD", "build_target_tokens"]
 
 
 @dataclass

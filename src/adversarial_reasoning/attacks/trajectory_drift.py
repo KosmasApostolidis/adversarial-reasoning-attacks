@@ -15,19 +15,25 @@ Caller contract
 - ``target`` is the concatenated token-id tensor of the full benign
   trajectory (shape ``(1, T_target)``).
 - The attack computes benign reference logits **once** with the original
-  image (no_grad), caches them, then runs PGD-L∞ ascent on KL.
+  image (no_grad, via :meth:`TrajectoryDriftLoss.from_benign`), caches
+  them, then runs PGD-L∞ ascent on KL via :func:`linf_pgd_loop`.
+
+Refactor (2026-04-25): the inline KL block + per-restart loop body now
+delegate to :mod:`adversarial_reasoning.attacks.loss` and
+:mod:`adversarial_reasoning.attacks._loop`. Numeric outputs are
+byte-identical to the prior monolithic implementation.
 """
 
 from __future__ import annotations
 
-import math
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 
 import torch
-from torch.nn import functional as F
 
+from ._loop import linf_pgd_loop
 from .base import AttackBase, AttackResult
+from .loss import TrajectoryDriftLoss
 
 
 @dataclass
@@ -60,59 +66,36 @@ class TrajectoryDriftPGD(AttackBase):
         if x0.ndim == 3:
             x0 = x0.unsqueeze(0)
 
-        fwd_kwargs = forward_kwargs or {}
+        gen_kwargs = forward_kwargs or {}
         alpha = self.alpha if self.alpha is not None else self.epsilon / 4.0
-        t_prompt = prompt_tokens.shape[-1]
-        t_target = target.shape[-1]
 
-        with torch.no_grad():
-            input_ids = torch.cat([prompt_tokens, target], dim=-1)
-            benign_logits = vlm.forward_with_logits(x0, input_ids, **fwd_kwargs)
-            benign_slice = benign_logits[:, t_prompt - 1 : t_prompt - 1 + t_target, :].detach()
-            log_benign = F.log_softmax(benign_slice, dim=-1)
-            p_benign = log_benign.exp()
+        # Compute & cache the benign reference distribution once (no_grad).
+        loss_fn = TrajectoryDriftLoss.from_benign(
+            vlm=vlm,
+            x0=x0,
+            prompt_tokens=prompt_tokens,
+            target=target,
+            gen_kwargs=gen_kwargs,
+        )
 
-        best: AttackResult | None = None
-        for restart in range(self.random_restarts):
-            delta = torch.empty_like(x0).uniform_(-self.epsilon, self.epsilon)
-            delta = torch.clamp(x0 + delta, self.clip_min, self.clip_max) - x0
-            delta.requires_grad_(True)
-
-            loss_traj: list[float] = []
-            for _step in range(self.steps):
-                input_ids = torch.cat([prompt_tokens, target], dim=-1)
-                logits = vlm.forward_with_logits(x0 + delta, input_ids, **fwd_kwargs)
-                attacked_slice = logits[:, t_prompt - 1 : t_prompt - 1 + t_target, :]
-                log_attacked = F.log_softmax(attacked_slice, dim=-1)
-                kl = F.kl_div(log_attacked, p_benign, reduction="batchmean")
-                loss = -kl  # ascend KL → minimise -KL
-                loss_traj.append(float(loss.detach().cpu()))
-
-                grad = torch.autograd.grad(loss, delta, retain_graph=False)[0]
-                with torch.no_grad():
-                    delta.add_(alpha * grad.sign())
-                    delta.clamp_(-self.epsilon, self.epsilon)
-                    delta_data = torch.clamp(x0 + delta, self.clip_min, self.clip_max) - x0
-                    delta.copy_(delta_data)
-                    delta.grad = None
-
-            perturbed = torch.clamp(x0 + delta.detach(), self.clip_min, self.clip_max)
-            candidate = AttackResult(
-                perturbed_image=perturbed.squeeze(0) if perturbed.shape[0] == 1 else perturbed,
-                delta=delta.detach().squeeze(0) if delta.shape[0] == 1 else delta.detach(),
-                loss_final=loss_traj[-1],
-                loss_trajectory=loss_traj,
-                iterations=self.steps,
-                success=math.isfinite(loss_traj[-1]),
-                metadata={
-                    "restart": restart,
-                    "epsilon": self.epsilon,
-                    "alpha": alpha,
-                    "kl_final": -loss_traj[-1],
-                },
-            )
-            if best is None or candidate.loss_final < best.loss_final:
-                best = candidate
-
-        assert best is not None
-        return best
+        result = linf_pgd_loop(
+            loss_fn=loss_fn,
+            vlm=vlm,
+            x0=x0,
+            prompt_tokens=prompt_tokens,
+            target=target,
+            gen_kwargs=gen_kwargs,
+            epsilon=self.epsilon,
+            alpha=alpha,
+            n_iter=self.steps,
+            n_restarts=self.random_restarts,
+            step_sign=1.0,  # always ascend on -KL
+            clip_min=self.clip_min,
+            clip_max=self.clip_max,
+        )
+        # Preserve the legacy metadata key. ``loss_final = -KL`` for the
+        # winning restart, so ``kl_final = -loss_final``.
+        return replace(
+            result,
+            metadata={**result.metadata, "kl_final": -result.loss_final},
+        )

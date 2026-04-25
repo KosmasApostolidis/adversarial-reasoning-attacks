@@ -10,19 +10,26 @@ Design notes
   tool-call in the benign trajectory. We maximise cross-entropy against
   those targets for untargeted attacks and (separately in `targeted_tool.py`)
   minimise CE towards an attacker-chosen target tool for targeted attacks.
-- Random restart picks the perturbation with the worst (highest) loss.
+- Random restart picks the perturbation with the lowest ``loss_final``
+  (smaller-is-better convention from the attacker's perspective).
+
+Refactor (2026-04-25): the loss body and step+restart loop were extracted
+into :mod:`adversarial_reasoning.attacks.loss` and
+:mod:`adversarial_reasoning.attacks._loop` so PGD, APGD, and
+TrajectoryDriftPGD share one loss-computation path. Numeric outputs are
+byte-identical to the prior monolithic implementation.
 """
 
 from __future__ import annotations
 
-import math
 from dataclasses import dataclass
 from typing import Any
 
 import torch
-from torch.nn import functional as F
 
+from ._loop import linf_pgd_loop
 from .base import AttackBase, AttackResult
+from .loss import TokenTargetLoss
 
 
 @dataclass
@@ -51,9 +58,8 @@ class PGDAttack(AttackBase):
         target: token-id LongTensor (B, T_target) representing the token
             sequence whose log-prob we push (up for targeted, down otherwise).
         forward_kwargs: model-specific extras (e.g. Qwen `image_grid_thw`,
-            MLlama `aspect_ratio_ids` / `cross_attention_mask`, and the
-            `attention_mask` that covers the concatenated [prompt ‖ target]
-            sequence). The attack harness constructs these via
+            LLaVA-Next `image_sizes`, plus the `attention_mask` covering
+            `[prompt ‖ target]`). The attack harness constructs these via
             `vlm.prepare_attack_inputs(...)` before calling `run`.
         """
         if not getattr(vlm, "supports_gradients", False):
@@ -66,96 +72,26 @@ class PGDAttack(AttackBase):
             x0 = x0.unsqueeze(0)
 
         alpha = self.alpha if self.alpha is not None else self.epsilon / 4.0
-        best: AttackResult | None = None
-        fwd_kwargs = forward_kwargs or {}
+        # Sign convention preserved from pre-refactor behaviour: untargeted
+        # uses ``+alpha*sign(grad)`` on ``loss = -CE`` (loop ascends on loss);
+        # targeted uses ``-alpha*sign(grad)`` on ``loss = +CE`` (loop descends
+        # on CE). ``TokenTargetLoss`` carries the sign of CE; this flag
+        # carries the loop direction.
+        step_sign = -1.0 if self.targeted else 1.0
 
-        for restart in range(self.random_restarts):
-            delta = torch.empty_like(x0).uniform_(-self.epsilon, self.epsilon)
-            delta = torch.clamp(x0 + delta, self.clip_min, self.clip_max) - x0
-            delta.requires_grad_(True)
-
-            loss_traj: list[float] = []
-            for _step in range(self.steps):
-                loss = self._loss(vlm, x0 + delta, prompt_tokens, target, fwd_kwargs)
-                loss_traj.append(float(loss.detach().cpu()))
-                grad = torch.autograd.grad(loss, delta, retain_graph=False)[0]
-
-                # Untargeted: ascend (maximize CE) → +alpha * sign.
-                # Targeted:   descend (minimize CE towards target) → -alpha * sign.
-                direction = -1.0 if self.targeted else 1.0
-                with torch.no_grad():
-                    delta.add_(direction * alpha * grad.sign())
-                    delta.clamp_(-self.epsilon, self.epsilon)
-                    delta_data = torch.clamp(x0 + delta, self.clip_min, self.clip_max) - x0
-                    delta.copy_(delta_data)
-                    delta.grad = None
-
-            perturbed = torch.clamp(x0 + delta.detach(), self.clip_min, self.clip_max)
-            candidate = AttackResult(
-                perturbed_image=perturbed.squeeze(0) if perturbed.shape[0] == 1 else perturbed,
-                delta=delta.detach().squeeze(0) if delta.shape[0] == 1 else delta.detach(),
-                loss_final=loss_traj[-1],
-                loss_trajectory=loss_traj,
-                iterations=self.steps,
-                success=math.isfinite(loss_traj[-1]),
-                metadata={
-                    "restart": restart,
-                    "epsilon": self.epsilon,
-                    "alpha": alpha,
-                    "targeted": self.targeted,
-                },
-            )
-            best = self._select_better(best, candidate)
-
-        assert best is not None
-        return best
-
-    def _loss(
-        self,
-        vlm: Any,
-        x: torch.Tensor,
-        prompt_tokens: torch.Tensor,
-        target: torch.Tensor,
-        forward_kwargs: dict[str, Any] | None = None,
-    ) -> torch.Tensor:
-        """Teacher-forced cross-entropy against the target token sequence.
-
-        Causal LM invariant: logits at position *i* predict the token at
-        position *i+1*. So if we feed [prompt ‖ target] into the VLM, the
-        logits that score the target tokens live at positions
-        [len(prompt) - 1 : len(prompt) - 1 + len(target)], NOT at the tail.
-
-        For targeted attack: return +CE (descend ⇒ match target).
-        For untargeted: return −CE (ascend ⇒ diverge from benign target).
-        """
-        input_ids = torch.cat([prompt_tokens, target], dim=-1)
-        logits = vlm.forward_with_logits(x, input_ids, **(forward_kwargs or {}))
-
-        t_prompt = prompt_tokens.shape[-1]
-        t_target = target.shape[-1]
-        if logits.shape[1] < t_prompt + t_target:
-            raise ValueError(
-                f"Logits length {logits.shape[1]} < prompt+target length "
-                f"{t_prompt + t_target}. Ensure forward_with_logits returns "
-                "per-token logits for the full teacher-forced sequence."
-            )
-
-        logits_for_target = logits[:, t_prompt - 1 : t_prompt - 1 + t_target, :]
-        ce = F.cross_entropy(
-            logits_for_target.reshape(-1, logits_for_target.shape[-1]),
-            target.reshape(-1),
+        return linf_pgd_loop(
+            loss_fn=TokenTargetLoss(targeted=self.targeted),
+            vlm=vlm,
+            x0=x0,
+            prompt_tokens=prompt_tokens,
+            target=target,
+            gen_kwargs=forward_kwargs or {},
+            epsilon=self.epsilon,
+            alpha=alpha,
+            n_iter=self.steps,
+            n_restarts=self.random_restarts,
+            step_sign=step_sign,
+            clip_min=self.clip_min,
+            clip_max=self.clip_max,
+            static_metadata={"targeted": self.targeted},
         )
-        return ce if self.targeted else -ce
-
-    @staticmethod
-    def _select_better(
-        current: AttackResult | None,
-        candidate: AttackResult,
-    ) -> AttackResult:
-        """Keep the worst-loss restart for untargeted, best-loss for targeted."""
-        if current is None:
-            return candidate
-        # For untargeted (loss = -CE), smaller loss means larger CE → worse for model.
-        # For targeted (loss = +CE), smaller loss means better for attacker.
-        # In both cases, smaller is better from the attacker's perspective.
-        return candidate if candidate.loss_final < current.loss_final else current

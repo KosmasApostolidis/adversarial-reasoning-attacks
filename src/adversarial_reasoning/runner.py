@@ -19,7 +19,7 @@ from __future__ import annotations
 import argparse
 import json
 import time
-from dataclasses import asdict, dataclass, field
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -32,13 +32,17 @@ from .agents.medical_agent import MedicalAgent
 from .attacks.apgd import APGDAttack
 from .attacks.base import AttackBase
 from .attacks.pgd import PGDAttack
-from .attacks.targeted_tool import TargetedToolPGD, build_target_tokens
+from .attacks.targeted_tool import TargetedToolPGD
+from .attacks.targets import (
+    target_from_benign,
+    target_from_tool,
+    target_from_trajectory,
+)
 from .attacks.trajectory_drift import TrajectoryDriftPGD
 from .metrics.trajectory import trajectory_edit_distance
 from .models.loader import load_hf_vlm
 from .tasks.loader import load_task
 from .tools.registry import default_registry
-
 
 GRADIENT_MODES = {"pgd", "apgd", "targeted_tool", "trajectory_drift"}
 
@@ -153,53 +157,19 @@ def build_attack(
     raise ValueError(f"Unknown gradient attack mode: {mode}")
 
 
-def _build_target_tokens(
-    vlm: Any,
-    benign: Trajectory,
-    prompt_input_ids: "Any",
-) -> "Any":
-    """Construct teacher-forced target token sequence from the benign trajectory.
-
-    For untargeted PGD we want the model's likelihood of *the benign tool
-    call* to drop. Build a Qwen-style ``<tool_call>...</tool_call>`` block
-    around the first benign tool call (or a placeholder if none) and tokenize
-    via the model's own tokenizer.
-    """
-    if benign.tool_calls:
-        tc = benign.tool_calls[0]
-        target_text = (
-            "<tool_call>\n"
-            f'{{"name": "{tc.name}", "arguments": {json.dumps(tc.args)}}}'
-            "\n</tool_call>"
-        )
-    else:
-        target_text = '<tool_call>\n{"name": "describe_region", "arguments": {}}\n</tool_call>'
-
-    enc = vlm.processor.tokenizer(
-        target_text, return_tensors="pt", add_special_tokens=False
-    )
-    return enc["input_ids"].to(prompt_input_ids.device)
+_NON_GEN_KEYS = frozenset({"pixel_values", "input_ids", "attention_mask"})
 
 
-def _build_trajectory_tokens(
-    vlm: Any,
-    benign: Trajectory,
-    prompt_input_ids: "Any",
-) -> "Any":
-    """Concatenate every benign tool-call block into one teacher-forced target."""
-    if not benign.tool_calls:
-        return _build_target_tokens(vlm, benign, prompt_input_ids)
-    blocks = [
-        "<tool_call>\n"
-        f'{{"name": "{tc.name}", "arguments": {json.dumps(tc.args)}}}'
-        "\n</tool_call>"
-        for tc in benign.tool_calls
-    ]
-    target_text = "\n".join(blocks)
-    enc = vlm.processor.tokenizer(
-        target_text, return_tensors="pt", add_special_tokens=False
-    )
-    return enc["input_ids"].to(prompt_input_ids.device)
+def _build_attack_target(
+    *, mode: str, vlm: Any, benign: Trajectory, prompt_input_ids: Any,
+    target_tool: str,
+) -> Any:
+    """Pick the right target-token builder for ``mode``."""
+    if mode == "targeted_tool":
+        return target_from_tool(vlm, target_tool, device=prompt_input_ids.device)
+    if mode == "trajectory_drift":
+        return target_from_trajectory(vlm, benign, prompt_input_ids)
+    return target_from_benign(vlm, benign, prompt_input_ids)
 
 
 def run_gradient_attack(
@@ -217,19 +187,28 @@ def run_gradient_attack(
     target_tool: str = "escalate_to_specialist",
     target_step_k: int = 0,
 ) -> Trajectory:
-    """Run a gradient-based attack on Qwen-shaped pixel_values, then adv inference.
+    """Run a gradient-based attack on the model's normalised pixel tensor,
+    then re-run the agent on the perturbed pixels.
 
-    Dispatches by ``mode`` to construct the attack-specific target sequence:
-      - pgd / apgd: benign tool-call (single block) — drop benign likelihood
-      - targeted_tool: forced tool-name block — push targeted likelihood
-      - trajectory_drift: concat of all benign tool-calls — KL ascent
+    Dispatches by ``mode`` to :mod:`adversarial_reasoning.attacks.targets`
+    for target-token construction:
+
+      - ``pgd`` / ``apgd``: benign first tool-call block — drop benign
+        likelihood.
+      - ``targeted_tool``: forced ``target_tool`` tool-call block — push
+        attacker-chosen likelihood.
+      - ``trajectory_drift``: concat of all benign tool-call blocks —
+        KL ascent on the full benign trajectory.
 
     Notes
     -----
-    - ε is applied in the *processor-normalised* pixel domain (CLIP std ≈ 0.27),
-      so a pixel-domain ε of 8/255 corresponds to ~0.116 here. Pass-through
-      keeps comparison apples-to-apples with the noise mode.
-    - Clip bounds [-3, 3] generously cover normalised range for natural images.
+    - ε is applied in the *processor-normalised* pixel domain (CLIP std ≈
+      0.27), so a pixel-domain ε of 8/255 corresponds to ~0.116 here.
+      Keeping it normalised matches the noise mode apples-to-apples.
+    - Clip bounds [-3, 3] generously cover the normalised range.
+    - Model-family extras (``image_grid_thw`` for Qwen, ``image_sizes``
+      for LLaVA-Next, etc.) flow through ``prepare_attack_inputs`` ⇒
+      ``forward_kwargs`` ⇒ ``gen_kwargs`` without per-model branching.
     """
     import torch
 
@@ -242,34 +221,24 @@ def run_gradient_attack(
 
     attack_in = vlm.prepare_attack_inputs(sample.image, sample.prompt)
     pixel_values = attack_in["pixel_values"]
-    image_grid_thw = attack_in.get("image_grid_thw")
-    image_sizes = attack_in.get("image_sizes")
     prompt_input_ids = attack_in["input_ids"]
     prompt_attn = attack_in.get("attention_mask")
+    # Everything other than pixel_values/input_ids/attention_mask is a
+    # model-family-specific tensor that must flow through both the gradient
+    # forward (forward_kwargs) and the post-attack generation (gen_kwargs)
+    # untouched. New backends just add new keys; no per-model branching.
+    model_kwargs = {k: v for k, v in attack_in.items() if k not in _NON_GEN_KEYS}
 
-    if mode == "targeted_tool":
-        target_ids = build_target_tokens(
-            vlm, target_tool, device=prompt_input_ids.device
-        )
-    elif mode == "trajectory_drift":
-        target_ids = _build_trajectory_tokens(vlm, benign, prompt_input_ids)
-    else:
-        target_ids = _build_target_tokens(vlm, benign, prompt_input_ids)
+    target_ids = _build_attack_target(
+        mode=mode, vlm=vlm, benign=benign,
+        prompt_input_ids=prompt_input_ids, target_tool=target_tool,
+    )
 
+    fwd_kwargs: dict[str, Any] = dict(model_kwargs)
     if prompt_attn is not None:
-        attn_full = torch.cat(
+        fwd_kwargs["attention_mask"] = torch.cat(
             [prompt_attn, torch.ones_like(target_ids)], dim=-1
         )
-    else:
-        attn_full = None
-
-    fwd_kwargs: dict[str, Any] = {}
-    if image_grid_thw is not None:
-        fwd_kwargs["image_grid_thw"] = image_grid_thw
-    if image_sizes is not None:
-        fwd_kwargs["image_sizes"] = image_sizes
-    if attn_full is not None:
-        fwd_kwargs["attention_mask"] = attn_full
 
     attack = build_attack(
         mode,
@@ -292,11 +261,6 @@ def run_gradient_attack(
     if perturbed_pv.shape != pixel_values.shape:
         perturbed_pv = perturbed_pv.view(pixel_values.shape)
 
-    gen_kwargs: dict[str, Any] = {}
-    if image_grid_thw is not None:
-        gen_kwargs["image_grid_thw"] = image_grid_thw
-    if image_sizes is not None:
-        gen_kwargs["image_sizes"] = image_sizes
     attacked = agent.run_with_pixel_values(
         task_id=task_id,
         pixel_values=perturbed_pv.to(pixel_values.dtype),
@@ -304,7 +268,7 @@ def run_gradient_attack(
         template_image=sample.image,
         seed=seed,
         max_steps=max_steps,
-        gen_kwargs=gen_kwargs,
+        gen_kwargs=dict(model_kwargs),
     )
     attacked.metadata[f"{mode}_loss_final"] = float(res.loss_final)
     attacked.metadata[f"{mode}_steps"] = int(res.iterations)

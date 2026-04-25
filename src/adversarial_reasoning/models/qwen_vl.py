@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 import torch
 from PIL import Image
 
+from ..types import AttackInputs
 from .base import VLMBase, VLMGenerateResult
 
 
@@ -197,7 +198,7 @@ class QwenVL(VLMBase):
         image: Image.Image,
         prompt: str,
         tools_schema: list[dict] | None = None,
-    ) -> dict[str, Any]:
+    ) -> AttackInputs:
         """Precompute the tensors attacks need to invoke `forward_with_logits`.
 
         Returns a dict with at minimum:
@@ -227,4 +228,4 @@ class QwenVL(VLMBase):
             return_tensors="pt",
             padding=True,
         ).to(self.model.device)
-        return dict(inputs)
+        return cast(AttackInputs, dict(inputs))

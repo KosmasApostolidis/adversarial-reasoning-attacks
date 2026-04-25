@@ -14,6 +14,12 @@ Differences vs PGD:
 Checkpoint schedule (paper §3.2): ``p_0 = 0``, ``p_1 = 0.22``,
 ``p_{j+1} = p_j + max(p_j - p_{j-1} - 0.03, 0.06)``. The j-th
 checkpoint is at iteration ``ceil(p_j * N)``.
+
+Refactor note (2026-04-25): the cross-entropy loss body that APGD
+shared with PGD via ``proxy._loss`` is now provided by
+:class:`adversarial_reasoning.attacks.loss.TokenTargetLoss`. The
+adaptive-step + warm-restart logic stays APGD-private — APGD's update
+rule is too distinct to share with PGD's plain sign-SGD loop.
 """
 
 from __future__ import annotations
@@ -25,7 +31,7 @@ from typing import Any
 import torch
 
 from .base import AttackBase, AttackResult
-from .pgd import PGDAttack
+from .loss import TokenTargetLoss
 
 
 def _checkpoints(n_iter: int) -> list[int]:
@@ -69,13 +75,8 @@ class APGDAttack(AttackBase):
         if x0.ndim == 3:
             x0 = x0.unsqueeze(0)
 
-        proxy = PGDAttack(
-            epsilon=self.epsilon,
-            targeted=self.targeted,
-            clip_min=self.clip_min,
-            clip_max=self.clip_max,
-        )
-        fwd_kwargs = forward_kwargs or {}
+        loss_fn = TokenTargetLoss(targeted=self.targeted)
+        gen_kwargs = forward_kwargs or {}
         checkpoints = _checkpoints(self.steps)
         sign = -1.0 if self.targeted else 1.0  # smaller-loss-is-better convention
 
@@ -96,7 +97,7 @@ class APGDAttack(AttackBase):
             ckpt_idx = 0
 
             for step in range(self.steps):
-                loss = proxy._loss(vlm, x0 + delta, prompt_tokens, target, fwd_kwargs)
+                loss = loss_fn(vlm, x0 + delta, prompt_tokens, target, gen_kwargs)
                 loss_val = float(loss.detach().cpu())
                 loss_traj.append(loss_val)
 
