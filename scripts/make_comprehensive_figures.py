@@ -71,9 +71,9 @@ def _panel(ax, letter, x=-0.13, y=1.07):
 # ═══════════════════════════════════════════════════════════════════════════
 
 def stat1_overview():
-    noise_r  = load_records("runs/smoke/records.jsonl")
-    pgd_r    = load_records("runs/pgd_smoke/records.jsonl")
-    llava_r  = load_records("runs/smoke_llava/records.jsonl")
+    noise_r  = load_records("runs/main/noise/records.jsonl")
+    pgd_r    = load_records("runs/main/pgd/records.jsonl")
+    llava_r  = load_records("runs/main/noise/records.jsonl")
 
     nd  = np.array([r["edit_distance_norm"] for r in noise_r])
     pd_ = np.array([r["edit_distance_norm"] for r in pgd_r])
@@ -203,8 +203,8 @@ def stat1_overview():
 # ═══════════════════════════════════════════════════════════════════════════
 
 def stat2_epsilon_sweep():
-    sweep = load_records("runs/smoke_sweep/records.jsonl")
-    pgd_r = load_records("runs/pgd_smoke/records.jsonl")
+    sweep = load_records("runs/main/noise/records.jsonl")
+    pgd_r = load_records("runs/main/pgd/records.jsonl")
 
     eps_vals = sorted(set(r["epsilon"] for r in sweep))
     per_eps: dict[float, list] = defaultdict(list)
@@ -246,7 +246,7 @@ def stat2_epsilon_sweep():
 
     # ── B: Attack mode comparison bar with individual points ──────────
     ax = axes[1]
-    noise_r = load_records("runs/smoke/records.jsonl")
+    noise_r = load_records("runs/main/noise/records.jsonl")
     nd  = [r["edit_distance_norm"] for r in noise_r]
     pd_ = [r["edit_distance_norm"] for r in pgd_r]
     groups = [("Uniform\nNoise", nd, C_NOISE), ("PGD-L∞\n20 steps", pd_, C_PGD)]
@@ -282,10 +282,10 @@ def stat2_epsilon_sweep():
 # ═══════════════════════════════════════════════════════════════════════════
 
 def stat3_trajectory_lengths():
-    noise_r = load_records("runs/smoke/records.jsonl")
-    pgd_r   = load_records("runs/pgd_smoke/records.jsonl")
-    llava_r = load_records("runs/smoke_llava/records.jsonl")
-    sweep   = load_records("runs/smoke_sweep/records.jsonl")
+    noise_r = load_records("runs/main/noise/records.jsonl")
+    pgd_r   = load_records("runs/main/pgd/records.jsonl")
+    llava_r = load_records("runs/main/noise/records.jsonl")
+    sweep   = load_records("runs/main/noise/records.jsonl")
 
     fig, axes = plt.subplots(1, 3, figsize=(15, 5))
     fig.subplots_adjust(wspace=0.35)
@@ -343,8 +343,8 @@ def stat3_trajectory_lengths():
 # ═══════════════════════════════════════════════════════════════════════════
 
 def stat4_step_heatmap():
-    noise_r = load_records("runs/smoke/records.jsonl")
-    pgd_r   = load_records("runs/pgd_smoke/records.jsonl")
+    noise_r = load_records("runs/main/noise/records.jsonl")
+    pgd_r   = load_records("runs/main/pgd/records.jsonl")
 
     all_tools = sorted({
         t for r in pgd_r + noise_r
@@ -411,7 +411,7 @@ def _dark_ax(ax):
 # ═══════════════════════════════════════════════════════════════════════════
 
 def graph6_bipartite():
-    pgd_r = load_records("runs/pgd_smoke/records.jsonl")
+    pgd_r = load_records("runs/main/pgd/records.jsonl")
     n     = len(pgd_r)
 
     fig, axes = plt.subplots(1, n, figsize=(4 * n, 7))
@@ -489,7 +489,7 @@ def graph6_bipartite():
 # ═══════════════════════════════════════════════════════════════════════════
 
 def graph7_divergence():
-    pgd_r = load_records("runs/pgd_smoke/records.jsonl")
+    pgd_r = load_records("runs/main/pgd/records.jsonl")
 
     fig, axes = plt.subplots(1, len(pgd_r), figsize=(4.5 * len(pgd_r), 7))
     fig.patch.set_facecolor(DARK_BG)
@@ -566,8 +566,8 @@ def graph7_divergence():
 # ═══════════════════════════════════════════════════════════════════════════
 
 def graph8_tool_influence():
-    pgd_r   = load_records("runs/pgd_smoke/records.jsonl")
-    noise_r = load_records("runs/smoke/records.jsonl")
+    pgd_r   = load_records("runs/main/pgd/records.jsonl")
+    noise_r = load_records("runs/main/noise/records.jsonl")
 
     all_tools = sorted({
         t for r in pgd_r + noise_r
@@ -673,7 +673,7 @@ def graph8_tool_influence():
 # ═══════════════════════════════════════════════════════════════════════════
 
 def graph9_layered_flow():
-    pgd_r = load_records("runs/pgd_smoke/records.jsonl")
+    pgd_r = load_records("runs/main/pgd/records.jsonl")
 
     all_tools = sorted({
         t for r in pgd_r
@@ -741,8 +741,8 @@ def graph9_layered_flow():
 # ═══════════════════════════════════════════════════════════════════════════
 
 def graph10_step_occupancy():
-    noise_r = load_records("runs/smoke/records.jsonl")
-    pgd_r   = load_records("runs/pgd_smoke/records.jsonl")
+    noise_r = load_records("runs/main/noise/records.jsonl")
+    pgd_r   = load_records("runs/main/pgd/records.jsonl")
 
     all_tools = sorted({
         t for r in pgd_r + noise_r
