@@ -212,11 +212,23 @@ What the gates check:
   stochasticity. The convention is `attack_effect ≥ 2 × median(noise_floor)`
   to count.
 
-Standalone CLI for the gate functions does not exist yet (the modules
-expose `run_preprocessing_transfer()` and `run_noise_floor()` library
-calls); pytest is the supported entry point. The README's
-`python -m adversarial_reasoning.gates.preprocessing_transfer` line is
-aspirational — track adding `__main__` blocks as future work.
+Standalone CLIs are also available — each module exposes a `_cli()` and
+a `__main__` entry point:
+
+```bash
+python -m adversarial_reasoning.gates.preprocessing_transfer \
+    --epsilon 0.0627 --gate-threshold 0.0078 \
+    --out runs/gates/preprocessing_transfer.txt
+# exit 0 if eff_linf >= gate_threshold, else exit 1.
+
+python -m adversarial_reasoning.gates.noise_floor \
+    --model qwen2_5_vl_7b --task prostate_mri_workup --synthetic \
+    --seeds 0 1 2 3 4 \
+    --out runs/gates/noise_floor_qwen2_5_vl_7b.txt
+```
+
+Both write a plain-text gate report; `pytest tests/test_gates.py`
+remains the canonical CI entry point.
 
 ---
 
@@ -444,7 +456,7 @@ script before running the next command. Implementation spec:
 - **Output**: `paper/tables/main_benchmark.tex` (booktabs format,
   ready to `\input{}` from the manuscript).
 - **Helpers already present**: `src/adversarial_reasoning/metrics/stats.py`
-  exposes `wilcoxon_signed_rank_pair`, `benjamini_hochberg`, and
+  exposes `wilcoxon_signed_rank`, `benjamini_hochberg`, and
   `bootstrap_ci` with the right signatures — wire them up in the new
   script.
 
