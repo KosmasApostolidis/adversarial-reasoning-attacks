@@ -7,9 +7,9 @@ images so smoke / CI can exercise the full pipeline without TCIA access.
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterator
 
 import numpy as np
 import yaml
@@ -24,14 +24,12 @@ class TaskSample:
     prompt: str
 
 
-def load_task_config(
-    task_id: str, config_path: str | Path = "configs/tasks.yaml"
-) -> dict:
+def load_task_config(task_id: str, config_path: str | Path = "configs/tasks.yaml") -> dict:
     with Path(config_path).open("r", encoding="utf-8") as f:
         cfg = yaml.safe_load(f)
     if task_id not in cfg["tasks"]:
         raise KeyError(f"Task {task_id!r} not in {config_path}")
-    return cfg["tasks"][task_id]
+    return dict(cfg["tasks"][task_id])
 
 
 def _synthetic_image(seed: int, size: tuple[int, int] = (512, 512)) -> Image.Image:
@@ -47,22 +45,22 @@ def _resolve_image_dir(dataset: str, split: str) -> Path:
 def _iter_split_files(data_dir: Path) -> list[Path]:
     if not data_dir.exists():
         return []
-    return sorted(
-        [p for p in data_dir.iterdir() if p.suffix.lower() in {".png", ".jpg", ".jpeg"}]
-    )
+    return sorted([p for p in data_dir.iterdir() if p.suffix.lower() in {".png", ".jpg", ".jpeg"}])
 
 
-# ----- ProstateX-BHI .npy volume loader ------------------------------------
+# ----- ProstateX .npy volume loader ----------------------------------------
 
-# Base path for user's local BHI ProstateX cv_folds (3D volumes).
-# Override via AR_PROSTATEX_BHI_ROOT env var.
-_BHI_ROOT_DEFAULT = Path("/home/medadmin/kosmasapostolidis/BHI/data/processed/cv_folds")
+# Base path for ProstateX cv_folds (3D volumes), produced by
+# `scripts/preprocess_prostatex2_dicom.py`. Override via
+# AR_PROSTATEX_BHI_ROOT env var.
+_BHI_IN_REPO = Path("data/prostatex/processed/cv_folds")
 
 
 def _bhi_root() -> Path:
     import os
 
-    return Path(os.environ.get("AR_PROSTATEX_BHI_ROOT", str(_BHI_ROOT_DEFAULT)))
+    override = os.environ.get("AR_PROSTATEX_BHI_ROOT")
+    return Path(override) if override else _BHI_IN_REPO
 
 
 def _normalize_slice_to_uint8(slice2d: np.ndarray) -> np.ndarray:
@@ -85,9 +83,7 @@ def _best_slice_index(mask_volume: np.ndarray) -> int:
     return int(mask_volume.shape[0] // 2)
 
 
-def _load_prostatex_bhi(
-    split: str, n: int | None, fold: int = 1
-) -> list[tuple[str, Image.Image]]:
+def _load_prostatex_bhi(split: str, n: int | None, fold: int = 1) -> list[tuple[str, Image.Image]]:
     """Load (sample_id, PIL.Image) list from one BHI cv_fold split."""
     fold_dir = _bhi_root() / f"fold_{fold}"
     x_path = fold_dir / f"fold_{fold}_X_{split}_3D.npy"

@@ -78,7 +78,7 @@ class LlamaVision(VLMBase):
                 temperature=max(temperature, 1e-5),
             )
 
-        generated_ids = out[:, inputs.input_ids.shape[1]:]
+        generated_ids = out[:, inputs.input_ids.shape[1] :]
         text_out = self.processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
         return VLMGenerateResult(
             text=text_out,
@@ -102,7 +102,7 @@ class LlamaVision(VLMBase):
         ]
         return "\n".join(lines)
 
-    def forward_with_logits(
+    def forward_with_logits(  # type: ignore[override]
         self,
         image_tensor: torch.Tensor,
         input_ids: torch.Tensor,

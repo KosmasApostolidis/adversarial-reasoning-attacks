@@ -1,7 +1,7 @@
 """Experiment runner.
 
 Loads ``configs/<exp>.yaml``, iterates over
-``models × tasks × attacks × epsilons × seeds × samples``, and records one
+``models x tasks x attacks x epsilons x seeds x samples``, and records one
 JSONL row per (benign, attacked) pair.
 
 Attack modes
@@ -67,7 +67,7 @@ class RunnerConfig:
 
 def _load_yaml(path: str | Path) -> dict:
     with Path(path).open("r", encoding="utf-8") as f:
-        return yaml.safe_load(f)
+        return dict(yaml.safe_load(f) or {})
 
 
 def load_runner_config(exp_path: str | Path) -> RunnerConfig:
@@ -86,9 +86,7 @@ def load_runner_config(exp_path: str | Path) -> RunnerConfig:
     )
 
 
-def resolve_epsilons(
-    cfg: RunnerConfig, attack_name: str, attacks_yaml: dict
-) -> list[float]:
+def resolve_epsilons(cfg: RunnerConfig, attack_name: str, attacks_yaml: dict) -> list[float]:
     overrides = cfg.attack_overrides.get(attack_name, {})
     if "epsilons" in overrides:
         return list(overrides["epsilons"])
@@ -109,9 +107,7 @@ def perturb_noise(image: Image.Image, epsilon: float, seed: int) -> Image.Image:
     return Image.fromarray((adv * 255.0).astype(np.uint8))
 
 
-def perturb(
-    mode: str, image: Image.Image, epsilon: float, seed: int, **_: Any
-) -> Image.Image:
+def perturb(mode: str, image: Image.Image, epsilon: float, seed: int, **_: Any) -> Image.Image:
     if mode == "noise":
         return perturb_noise(image, epsilon, seed)
     if mode in GRADIENT_MODES:
@@ -135,24 +131,40 @@ def build_attack(
     """Construct an attack instance given the runner ``--mode`` value."""
     if mode == "pgd":
         return PGDAttack(
-            epsilon=epsilon, steps=steps, random_restarts=1,
-            targeted=False, clip_min=clip_min, clip_max=clip_max,
+            epsilon=epsilon,
+            steps=steps,
+            random_restarts=1,
+            targeted=False,
+            clip_min=clip_min,
+            clip_max=clip_max,
         )
     if mode == "apgd":
         return APGDAttack(
-            epsilon=epsilon, steps=steps, random_restarts=1,
-            targeted=False, clip_min=clip_min, clip_max=clip_max,
+            epsilon=epsilon,
+            steps=steps,
+            random_restarts=1,
+            targeted=False,
+            clip_min=clip_min,
+            clip_max=clip_max,
         )
     if mode == "targeted_tool":
         return TargetedToolPGD(
-            epsilon=epsilon, steps=steps, random_restarts=1,
-            target_tool=target_tool, target_step_k=target_step_k,
-            clip_min=clip_min, clip_max=clip_max,
+            epsilon=epsilon,
+            steps=steps,
+            random_restarts=1,
+            target_tool=target_tool,
+            target_step_k=target_step_k,
+            clip_min=clip_min,
+            clip_max=clip_max,
         )
     if mode == "trajectory_drift":
         return TrajectoryDriftPGD(
-            epsilon=epsilon, steps=steps, random_restarts=1,
-            targeted=False, clip_min=clip_min, clip_max=clip_max,
+            epsilon=epsilon,
+            steps=steps,
+            random_restarts=1,
+            targeted=False,
+            clip_min=clip_min,
+            clip_max=clip_max,
         )
     raise ValueError(f"Unknown gradient attack mode: {mode}")
 
@@ -161,7 +173,11 @@ _NON_GEN_KEYS = frozenset({"pixel_values", "input_ids", "attention_mask"})
 
 
 def _build_attack_target(
-    *, mode: str, vlm: Any, benign: Trajectory, prompt_input_ids: Any,
+    *,
+    mode: str,
+    vlm: Any,
+    benign: Trajectory,
+    prompt_input_ids: Any,
     target_tool: str,
 ) -> Any:
     """Pick the right target-token builder for ``mode``."""
@@ -230,15 +246,16 @@ def run_gradient_attack(
     model_kwargs = {k: v for k, v in attack_in.items() if k not in _NON_GEN_KEYS}
 
     target_ids = _build_attack_target(
-        mode=mode, vlm=vlm, benign=benign,
-        prompt_input_ids=prompt_input_ids, target_tool=target_tool,
+        mode=mode,
+        vlm=vlm,
+        benign=benign,
+        prompt_input_ids=prompt_input_ids,
+        target_tool=target_tool,
     )
 
     fwd_kwargs: dict[str, Any] = dict(model_kwargs)
     if prompt_attn is not None:
-        fwd_kwargs["attention_mask"] = torch.cat(
-            [prompt_attn, torch.ones_like(target_ids)], dim=-1
-        )
+        fwd_kwargs["attention_mask"] = torch.cat([prompt_attn, torch.ones_like(target_ids)], dim=-1)
 
     attack = build_attack(
         mode,
@@ -336,7 +353,9 @@ def main(argv: list[str] | None = None) -> int:
         choices=["noise", "pgd", "apgd", "targeted_tool", "trajectory_drift"],
         default="noise",
     )
-    p.add_argument("--synthetic", action="store_true", help="Skip disk lookup, use synthetic images")
+    p.add_argument(
+        "--synthetic", action="store_true", help="Skip disk lookup, use synthetic images"
+    )
     p.add_argument("--split", default="dev")
     p.add_argument("--out", default=None, help="Override output_dir")
     p.add_argument("--max-steps", type=int, default=8)
@@ -364,9 +383,7 @@ def main(argv: list[str] | None = None) -> int:
 
             for task_id in cfg.tasks:
                 t_override = cfg.task_overrides.get(task_id, {})
-                n_samples = int(
-                    t_override.get("dataset_split", {}).get(args.split, 0)
-                ) or None
+                n_samples = int(t_override.get("dataset_split", {}).get(args.split, 0)) or None
                 samples = list(
                     load_task(
                         task_id,

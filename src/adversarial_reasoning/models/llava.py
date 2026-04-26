@@ -85,7 +85,7 @@ class LlavaNext(VLMBase):
             "",
         ]
         for tool in tools_schema:
-            spec = tool.get("function", tool)   # unwrap OpenAI-style envelope
+            spec = tool.get("function", tool)  # unwrap OpenAI-style envelope
             lines.append(f"- {spec['name']}: {spec.get('description', '')}")
             lines.append(f"  args: {spec.get('parameters', {})}")
         lines += [
@@ -97,7 +97,7 @@ class LlavaNext(VLMBase):
         ]
         return "\n".join(lines)
 
-    def forward_with_logits(
+    def forward_with_logits(  # type: ignore[override]
         self,
         image_tensor: torch.Tensor,
         input_ids: torch.Tensor,
@@ -118,7 +118,7 @@ class LlavaNext(VLMBase):
         )
         return outputs.logits
 
-    def generate_from_pixel_values(
+    def generate_from_pixel_values(  # type: ignore[override]
         self,
         pixel_values: torch.Tensor,
         prompt: str,
@@ -145,11 +145,7 @@ class LlavaNext(VLMBase):
             text=chat_prompt, images=template_image, return_tensors="pt"
         ).to(self.model.device)
 
-        gen_image_sizes = (
-            image_sizes
-            if image_sizes is not None
-            else proc_inputs.get("image_sizes")
-        )
+        gen_image_sizes = image_sizes if image_sizes is not None else proc_inputs.get("image_sizes")
 
         with torch.no_grad():
             out = self.model.generate(

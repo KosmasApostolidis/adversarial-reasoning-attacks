@@ -88,7 +88,7 @@ class QwenVL(VLMBase):
                 output_scores=False,
             )
 
-        generated_ids = out.sequences[:, inputs.input_ids.shape[1]:]
+        generated_ids = out.sequences[:, inputs.input_ids.shape[1] :]
         text_out = self.processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
         return VLMGenerateResult(
             text=text_out,
@@ -96,7 +96,7 @@ class QwenVL(VLMBase):
             finish_reason="stop",
         )
 
-    def forward_with_logits(
+    def forward_with_logits(  # type: ignore[override]
         self,
         image_tensor: torch.Tensor,
         input_ids: torch.Tensor,
@@ -121,7 +121,7 @@ class QwenVL(VLMBase):
         )
         return outputs.logits
 
-    def generate_from_pixel_values(
+    def generate_from_pixel_values(  # type: ignore[override]
         self,
         pixel_values: torch.Tensor,
         prompt: str,
