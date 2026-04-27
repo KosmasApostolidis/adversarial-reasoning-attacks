@@ -1,0 +1,21 @@
+# Phase-2 main_benchmark — APGD-L∞ leg (Auto-PGD; warm-restart momentum).
+
+experiment:
+  name: main_benchmark_apgd
+  phase: "2"
+  seeds: [0, 1, 2, 3, 4]
+  output_dir: runs/main/apgd
+
+  models:
+    - qwen2_5_vl_7b
+    - llava_v1_6_mistral_7b
+
+  tasks:
+    - prostate_mri_workup
+    - rad_vqa_action
+    - prostate_mri_targeted
+
+  attacks:
+    - apgd_linf
+
+  epsilons_linf: [0.0078, 0.0157, 0.0314, 0.0627, 0.1254]

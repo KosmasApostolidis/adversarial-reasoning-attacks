@@ -429,15 +429,15 @@ def fig_violin_grid(by_attack: dict[str, list[dict]], out_path: Path) -> None:
 def main() -> int:
     root = Path(__file__).resolve().parents[1]
     by_attack = {
-        "noise":            load_records(root / "runs/smoke/records.jsonl",
-                                          root / "runs/smoke_sweep/records.jsonl"),
-        "pgd":              load_records(root / "runs/pgd_smoke/records.jsonl"),
-        "apgd":             load_records(root / "runs/apgd_sweep/records.jsonl",
-                                          root / "runs/apgd_smoke/records.jsonl"),
-        "targeted_tool":    load_records(root / "runs/targeted_tool_sweep/records.jsonl",
-                                          root / "runs/targeted_tool_smoke/records.jsonl"),
-        "trajectory_drift": load_records(root / "runs/trajectory_drift_sweep/records.jsonl",
-                                          root / "runs/trajectory_drift_smoke/records.jsonl"),
+        "noise":            load_records(root / "runs/main/noise/records.jsonl",
+                                          root / "runs/main/noise/records.jsonl"),
+        "pgd":              load_records(root / "runs/main/pgd/records.jsonl"),
+        "apgd":             load_records(root / "runs/main/apgd/records.jsonl",
+                                          root / "runs/main/apgd/records.jsonl"),
+        "targeted_tool":    load_records(root / "runs/main/targeted_tool/records.jsonl",
+                                          root / "runs/main/targeted_tool/records.jsonl"),
+        "trajectory_drift": load_records(root / "runs/main/trajectory_drift/records.jsonl",
+                                          root / "runs/main/trajectory_drift/records.jsonl"),
     }
 
     out_dir = root / "paper" / "figures" / "attack_landscape"

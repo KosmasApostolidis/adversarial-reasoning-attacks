@@ -77,10 +77,18 @@ def test_linf_loop_respects_image_bounds():
 
     res = linf_pgd_loop(
         loss_fn=TokenTargetLoss(targeted=False),
-        vlm=vlm, x0=image, prompt_tokens=prompt, target=target,
-        gen_kwargs={}, epsilon=64.0 / 255.0, alpha=8.0 / 255.0,
-        n_iter=10, n_restarts=1, step_sign=1.0,
-        clip_min=0.0, clip_max=1.0,
+        vlm=vlm,
+        x0=image,
+        prompt_tokens=prompt,
+        target=target,
+        gen_kwargs={},
+        epsilon=64.0 / 255.0,
+        alpha=8.0 / 255.0,
+        n_iter=10,
+        n_restarts=1,
+        step_sign=1.0,
+        clip_min=0.0,
+        clip_max=1.0,
     )
     perturbed = res.perturbed_image
     assert perturbed.min().item() >= -1e-6
@@ -94,9 +102,16 @@ def test_linf_loop_picks_lowest_loss_restart():
 
     res = linf_pgd_loop(
         loss_fn=TokenTargetLoss(targeted=False),
-        vlm=vlm, x0=image, prompt_tokens=prompt, target=target,
-        gen_kwargs={}, epsilon=8.0 / 255.0, alpha=2.0 / 255.0,
-        n_iter=8, n_restarts=4, step_sign=1.0,
+        vlm=vlm,
+        x0=image,
+        prompt_tokens=prompt,
+        target=target,
+        gen_kwargs={},
+        epsilon=8.0 / 255.0,
+        alpha=2.0 / 255.0,
+        n_iter=8,
+        n_restarts=4,
+        step_sign=1.0,
     )
     # Best-of-N returns the smallest final loss across restarts.
     assert math.isfinite(res.loss_final)
@@ -111,14 +126,132 @@ def test_linf_loop_step_sign_inverts_direction():
     image, prompt, target = _make_inputs()
     common = dict(
         loss_fn=TokenTargetLoss(targeted=False),
-        vlm=vlm, x0=image, prompt_tokens=prompt, target=target,
-        gen_kwargs={}, epsilon=8.0 / 255.0, alpha=2.0 / 255.0,
-        n_iter=15, n_restarts=1,
+        vlm=vlm,
+        x0=image,
+        prompt_tokens=prompt,
+        target=target,
+        gen_kwargs={},
+        epsilon=8.0 / 255.0,
+        alpha=2.0 / 255.0,
+        n_iter=15,
+        n_restarts=1,
     )
     pos = linf_pgd_loop(step_sign=+1.0, **common)
     neg = linf_pgd_loop(step_sign=-1.0, **common)
     # Opposite signs walk the loss in opposite directions; final losses differ.
     assert pos.loss_final != neg.loss_final
+
+
+class _NanFirstRestartLoss:
+    """Loss callable that returns NaN for the first ``n_iter_per_restart``
+    invocations, then a real (finite, gradient-bearing) loss thereafter.
+
+    Drives the regression test for the restart-selection NaN guard: under
+    the buggy comparison ``candidate.loss_final < best.loss_final``, a NaN
+    first restart would lock ``best`` and discard finite later restarts.
+    """
+
+    def __init__(self, n_iter_per_restart: int) -> None:
+        self.calls = 0
+        self.n_iter = n_iter_per_restart
+
+    def __call__(
+        self,
+        vlm: object,
+        image: torch.Tensor,
+        prompt_tokens: torch.Tensor,
+        target: torch.Tensor,
+        gen_kwargs: dict,
+    ) -> torch.Tensor:
+        real = (image**2).sum()
+        produce_nan = self.calls < self.n_iter
+        self.calls += 1
+        if produce_nan:
+            return real * float("nan")
+        return real
+
+
+@pytest.mark.smoke
+def test_linf_loop_prefers_finite_restart_over_nan_restart():
+    """First restart returns NaN losses; later restarts finite. The loop
+    must return the finite restart, not the NaN one."""
+    vlm = _LinearStubVLM()
+    image, prompt, target = _make_inputs()
+    n_iter = 5
+
+    res = linf_pgd_loop(
+        loss_fn=_NanFirstRestartLoss(n_iter_per_restart=n_iter),
+        vlm=vlm,
+        x0=image,
+        prompt_tokens=prompt,
+        target=target,
+        gen_kwargs={},
+        epsilon=8.0 / 255.0,
+        alpha=2.0 / 255.0,
+        n_iter=n_iter,
+        n_restarts=2,
+        step_sign=1.0,
+    )
+    assert math.isfinite(res.loss_final), (
+        "loop returned a NaN-loss restart instead of the finite one — "
+        "best-of-N comparison failed to guard against NaN"
+    )
+    assert res.metadata["restart"] == 1, (
+        "expected restart=1 (the finite one) to be selected, got "
+        f"restart={res.metadata['restart']}"
+    )
+
+
+@pytest.mark.smoke
+def test_linf_loop_epsilon_zero_short_circuits():
+    """``epsilon=0`` must return the input unmodified without running the
+    inner loop. Previously ran the full step budget producing zero
+    perturbation (wasted compute, plus undefined ``alpha=0/4``)."""
+    vlm = _LinearStubVLM()
+    image, prompt, target = _make_inputs()
+    res = linf_pgd_loop(
+        loss_fn=TokenTargetLoss(targeted=False),
+        vlm=vlm,
+        x0=image,
+        prompt_tokens=prompt,
+        target=target,
+        gen_kwargs={},
+        epsilon=0.0,
+        alpha=0.0,
+        n_iter=10,
+        n_restarts=2,
+        step_sign=1.0,
+    )
+    assert torch.equal(res.delta, torch.zeros_like(res.delta))
+    assert res.iterations == 0
+    assert torch.allclose(res.perturbed_image, image.squeeze(0), atol=0.0)
+
+
+@pytest.mark.smoke
+def test_linf_loop_seed_makes_runs_deterministic():
+    """Same ``seed`` must produce byte-identical perturbations across runs;
+    different seeds must produce different ones. Closes a reproducibility
+    gap where restart noise pulled from the global RNG state."""
+    vlm = _LinearStubVLM()
+    image, prompt, target = _make_inputs()
+    common = dict(
+        loss_fn=TokenTargetLoss(targeted=False),
+        vlm=vlm,
+        x0=image,
+        prompt_tokens=prompt,
+        target=target,
+        gen_kwargs={},
+        epsilon=8.0 / 255.0,
+        alpha=2.0 / 255.0,
+        n_iter=4,
+        n_restarts=2,
+        step_sign=1.0,
+    )
+    a = linf_pgd_loop(seed=123, **common)
+    b = linf_pgd_loop(seed=123, **common)
+    c = linf_pgd_loop(seed=456, **common)
+    assert torch.equal(a.delta, b.delta), "same seed must give identical delta"
+    assert not torch.equal(a.delta, c.delta), "different seeds must diverge"
 
 
 @pytest.mark.smoke
@@ -128,9 +261,16 @@ def test_linf_loop_static_metadata_passthrough():
 
     res = linf_pgd_loop(
         loss_fn=TokenTargetLoss(targeted=False),
-        vlm=vlm, x0=image, prompt_tokens=prompt, target=target,
-        gen_kwargs={}, epsilon=4.0 / 255.0, alpha=1.0 / 255.0,
-        n_iter=4, n_restarts=1, step_sign=1.0,
+        vlm=vlm,
+        x0=image,
+        prompt_tokens=prompt,
+        target=target,
+        gen_kwargs={},
+        epsilon=4.0 / 255.0,
+        alpha=1.0 / 255.0,
+        n_iter=4,
+        n_restarts=1,
+        step_sign=1.0,
         static_metadata={"targeted": False, "marker": "loop-test"},
     )
     assert res.metadata.get("targeted") is False

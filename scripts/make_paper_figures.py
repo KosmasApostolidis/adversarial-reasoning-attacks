@@ -66,9 +66,9 @@ def _panel_label(ax: plt.Axes, letter: str) -> None:
 # ═══════════════════════════════════════════════════════════════════════════
 
 def fig1_main_result() -> None:
-    noise_recs = load_records("runs/smoke/records.jsonl")
-    pgd_recs   = load_records("runs/pgd_smoke/records.jsonl")
-    sweep_recs = load_records("runs/smoke_sweep/records.jsonl")
+    noise_recs = load_records("runs/main/noise/records.jsonl")
+    pgd_recs   = load_records("runs/main/pgd/records.jsonl")
+    sweep_recs = load_records("runs/main/noise/records.jsonl")
 
     nd  = np.array([r["edit_distance_norm"] for r in noise_recs])
     pd_ = np.array([r["edit_distance_norm"] for r in pgd_recs])
@@ -171,8 +171,8 @@ def _tool_palette(all_tools: list[str]) -> dict[str, tuple]:
 
 
 def fig2_trajectories() -> None:
-    noise_recs = load_records("runs/smoke/records.jsonl")
-    pgd_recs   = load_records("runs/pgd_smoke/records.jsonl")
+    noise_recs = load_records("runs/main/noise/records.jsonl")
+    pgd_recs   = load_records("runs/main/pgd/records.jsonl")
 
     # Pick 3 most interesting samples (highest PGD edit distance)
     by_ed = sorted(pgd_recs, key=lambda r: r["edit_distance_norm"], reverse=True)[:3]
@@ -270,7 +270,7 @@ def fig2_trajectories() -> None:
 # ═══════════════════════════════════════════════════════════════════════════
 
 def fig3_tool_heatmap() -> None:
-    pgd_recs = load_records("runs/pgd_smoke/records.jsonl")
+    pgd_recs = load_records("runs/main/pgd/records.jsonl")
 
     # Collect min-edit alignment: for each sample, align benign → attacked
     # and count (benign_tool, attacked_tool) substitution pairs.
@@ -348,8 +348,8 @@ def fig3_tool_heatmap() -> None:
 # ═══════════════════════════════════════════════════════════════════════════
 
 def fig4_cross_model() -> None:
-    qwen_recs  = load_records("runs/smoke/records.jsonl")
-    llava_recs = load_records("runs/smoke_llava/records.jsonl")
+    qwen_recs  = load_records("runs/main/noise/records.jsonl")
+    llava_recs = load_records("runs/main/noise/records.jsonl")
 
     qd = np.array([r["edit_distance_norm"] for r in qwen_recs])
     ld = np.array([r["edit_distance_norm"] for r in llava_recs])
@@ -414,9 +414,9 @@ def fig4_cross_model() -> None:
 # ═══════════════════════════════════════════════════════════════════════════
 
 def fig5_attack_landscape() -> None:
-    noise_q = load_records("runs/smoke/records.jsonl")
-    pgd_q   = load_records("runs/pgd_smoke/records.jsonl")
-    noise_l = load_records("runs/smoke_llava/records.jsonl")
+    noise_q = load_records("runs/main/noise/records.jsonl")
+    pgd_q   = load_records("runs/main/pgd/records.jsonl")
+    noise_l = load_records("runs/main/noise/records.jsonl")
 
     groups  = [
         ("Qwen\n(noise)", np.array([r["edit_distance_norm"] for r in noise_q]), C_NOISE),

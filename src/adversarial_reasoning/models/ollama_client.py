@@ -5,7 +5,7 @@ from __future__ import annotations
 import base64
 import io
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 from PIL import Image
@@ -21,7 +21,9 @@ except ImportError:  # pragma: no cover
 
 @dataclass
 class OllamaSettings:
-    host: str = os.environ.get("OLLAMA_HOST", "http://127.0.0.1:11434")
+    host: str = field(
+        default_factory=lambda: os.environ.get("OLLAMA_HOST", "http://127.0.0.1:11434")
+    )
     request_timeout_s: float = 120.0
     max_retries: int = 3
 
@@ -53,10 +55,12 @@ class OllamaVLMClient(VLMBase):
 
     @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=1, max=10))
     def _chat(self, messages: list[dict[str, Any]], temperature: float) -> dict[str, Any]:
-        return self._client.chat(
-            model=self.model_id,
-            messages=messages,
-            options={"temperature": temperature},
+        return dict(
+            self._client.chat(
+                model=self.model_id,
+                messages=messages,
+                options={"temperature": temperature},
+            )
         )
 
     def generate(

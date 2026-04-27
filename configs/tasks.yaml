@@ -64,7 +64,10 @@ tasks:
       dev: 50
       test: 50
     prompt_template: |
-      {{ same_as_prostate_mri_workup }}
+      You are a radiology agent. Given this prostate MRI (T2, ADC, DWI panel),
+      decide whether to: (a) order a biopsy, (b) request follow-up imaging,
+      or (c) escalate to a urology specialist. Use the available tools to
+      compute PI-RADS-relevant risk, query guidelines, and draft a report.
     tools:
       - query_guidelines
       - lookup_pubmed
@@ -84,7 +87,10 @@ tasks:
       test: 20
     release: false              # NOT released publicly
     prompt_template: |
-      {{ same_as_prostate_mri_workup }}
+      You are a radiology agent. Given this prostate MRI (T2, ADC, DWI panel),
+      decide whether to: (a) order a biopsy, (b) request follow-up imaging,
+      or (c) escalate to a urology specialist. Use the available tools to
+      compute PI-RADS-relevant risk, query guidelines, and draft a report.
     tools:
       - query_guidelines
       - calculate_risk_score

@@ -113,7 +113,11 @@ select = [
     "SIM", # flake8-simplify
     "RUF", # ruff-specific
 ]
-ignore = ["E501"]  # handled by formatter
+ignore = [
+    "E501",  # handled by formatter
+    "RUF002",  # ambiguous unicode in docstring (ρ, ε, ×, ≤ etc. are intentional math glyphs)
+    "RUF003",  # ambiguous unicode in comment (same rationale)
+]
 
 [tool.mypy]
 python_version = "3.10"
@@ -126,10 +130,32 @@ files = ["src"]
 [tool.pytest.ini_options]
 minversion = "8.0"
 testpaths = ["tests"]
-addopts = "-ra --strict-markers --strict-config"
+addopts = "-ra --strict-markers --strict-config --cov=src/adversarial_reasoning --cov-report=term-missing --cov-fail-under=80"
 markers = [
     "slow: marks tests as slow (GPU/model loading)",
     "gpu: marks tests that require a CUDA GPU",
     "smoke: marks tests as smoke tests (quick sanity)",
     "integration: marks tests that hit live external services or full pipeline",
 ]
+
+[tool.coverage.run]
+source = ["src/adversarial_reasoning"]
+omit = [
+    # GPU/HF-only model wrappers — exercised by integration tests on the GPU box.
+    "src/adversarial_reasoning/models/qwen_vl.py",
+    "src/adversarial_reasoning/models/llava.py",
+    "src/adversarial_reasoning/models/internvl2.py",
+    # Live-VLM gates — exercised by integration tests.
+    "src/adversarial_reasoning/gates/e2e_probe.py",
+    "src/adversarial_reasoning/gates/noise_floor.py",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+]
+show_missing = true
+skip_covered = false

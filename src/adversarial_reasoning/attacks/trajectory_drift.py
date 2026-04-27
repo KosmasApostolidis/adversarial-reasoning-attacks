@@ -46,6 +46,7 @@ class TrajectoryDriftPGD(AttackBase):
     targeted: bool = False
     clip_min: float = 0.0
     clip_max: float = 1.0
+    seed: int | None = None
 
     def run(
         self,
@@ -58,9 +59,7 @@ class TrajectoryDriftPGD(AttackBase):
         **_ignored: Any,
     ) -> AttackResult:
         if not getattr(vlm, "supports_gradients", False):
-            raise ValueError(
-                f"VLM backend {vlm.__class__.__name__} does not support gradients."
-            )
+            raise ValueError(f"VLM backend {vlm.__class__.__name__} does not support gradients.")
 
         x0 = image.detach().clone()
         if x0.ndim == 3:
@@ -89,9 +88,10 @@ class TrajectoryDriftPGD(AttackBase):
             alpha=alpha,
             n_iter=self.steps,
             n_restarts=self.random_restarts,
-            step_sign=1.0,  # always ascend on -KL
+            step_sign=-1.0,  # descend on -KL ⇒ ascend on KL (diverge from benign)
             clip_min=self.clip_min,
             clip_max=self.clip_max,
+            seed=self.seed,
         )
         # Preserve the legacy metadata key. ``loss_final = -KL`` for the
         # winning restart, so ``kl_final = -loss_final``.

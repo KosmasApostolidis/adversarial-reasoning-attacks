@@ -1,0 +1,21 @@
+# Phase-2 main_benchmark — Targeted-Tool PGD leg (force a specific tool call).
+
+experiment:
+  name: main_benchmark_targeted_tool
+  phase: "2"
+  seeds: [0, 1, 2, 3, 4]
+  output_dir: runs/main/targeted_tool
+
+  models:
+    - qwen2_5_vl_7b
+    - llava_v1_6_mistral_7b
+
+  tasks:
+    - prostate_mri_workup
+    - rad_vqa_action
+    - prostate_mri_targeted
+
+  attacks:
+    - targeted_tool_pgd
+
+  epsilons_linf: [0.0078, 0.0157, 0.0314, 0.0627, 0.1254]

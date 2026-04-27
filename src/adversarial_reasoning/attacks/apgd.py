@@ -44,6 +44,17 @@ def _checkpoints(n_iter: int) -> list[int]:
     return [c for c in pts if c <= n_iter]
 
 
+def _step_is_improvement(loss_val: float, loss_prev: float, tol: float = 1e-12) -> bool:
+    """Croce-Hein 2020 ρ_w semantics: strict step-over-step decrease.
+
+    Returns True iff ``loss_val`` is finite and strictly less than the
+    previous step's loss by more than ``tol``. Replaces an earlier
+    improvement-over-running-best heuristic that under-counted halvings
+    once ``loss_best`` saturated.
+    """
+    return math.isfinite(loss_val) and loss_val < loss_prev - tol
+
+
 @dataclass
 class APGDAttack(AttackBase):
     name: str = "apgd_linf"
@@ -55,6 +66,7 @@ class APGDAttack(AttackBase):
     rho: float = 0.75
     clip_min: float = 0.0
     clip_max: float = 1.0
+    seed: int | None = None  # pin RNG for reproducible restarts
 
     def run(
         self,
@@ -67,18 +79,42 @@ class APGDAttack(AttackBase):
         **_ignored: Any,
     ) -> AttackResult:
         if not getattr(vlm, "supports_gradients", False):
-            raise ValueError(
-                f"VLM backend {vlm.__class__.__name__} does not support gradients."
-            )
+            raise ValueError(f"VLM backend {vlm.__class__.__name__} does not support gradients.")
 
         x0 = image.detach().clone()
         if x0.ndim == 3:
             x0 = x0.unsqueeze(0)
 
+        # ε=0 ⇒ no admissible perturbation; skip the inner loop. Same
+        # rationale as ``linf_pgd_loop`` short-circuit. Note ``grad.sign()``
+        # returns 0 in saturated regions — sign-SGD limitation, not fixed
+        # here.
+        if self.epsilon == 0.0:
+            zero_delta = torch.zeros_like(x0)
+            perturbed = torch.clamp(x0, self.clip_min, self.clip_max)
+            return AttackResult(
+                perturbed_image=perturbed.squeeze(0) if perturbed.shape[0] == 1 else perturbed,
+                delta=zero_delta.squeeze(0) if zero_delta.shape[0] == 1 else zero_delta,
+                loss_final=float("nan"),
+                loss_trajectory=[],
+                iterations=0,
+                success=False,
+                metadata={
+                    "epsilon": self.epsilon,
+                    "targeted": self.targeted,
+                    "short_circuit": "epsilon_zero",
+                },
+            )
+
         loss_fn = TokenTargetLoss(targeted=self.targeted)
         gen_kwargs = forward_kwargs or {}
         checkpoints = _checkpoints(self.steps)
         sign = -1.0 if self.targeted else 1.0  # smaller-loss-is-better convention
+
+        if self.seed is not None:
+            torch.manual_seed(self.seed)
+            if torch.cuda.is_available():
+                torch.cuda.manual_seed_all(self.seed)
 
         best: AttackResult | None = None
         for restart in range(self.random_restarts):
@@ -90,6 +126,7 @@ class APGDAttack(AttackBase):
             x_prev = (x0 + delta).detach().clone()
             x_best = x_prev.clone()
             loss_best = float("inf")
+            loss_prev = float("inf")
             loss_traj: list[float] = []
             success_count = 0
             loss_at_last_ckpt = float("inf")
@@ -104,7 +141,12 @@ class APGDAttack(AttackBase):
                 if loss_val < loss_best:
                     loss_best = loss_val
                     x_best = (x0 + delta).detach().clone()
+                # ρ_w (Croce-Hein 2020): success counts strict step-over-step
+                # improvement within the current checkpoint window, not
+                # improvement over the running best.
+                if _step_is_improvement(loss_val, loss_prev):
                     success_count += 1
+                loss_prev = loss_val
 
                 grad = torch.autograd.grad(loss, delta, retain_graph=False)[0]
 
@@ -112,9 +154,11 @@ class APGDAttack(AttackBase):
                     z = x0 + delta - sign * eta * grad.sign()
                     z = torch.clamp(z, x0 - self.epsilon, x0 + self.epsilon)
                     z = torch.clamp(z, self.clip_min, self.clip_max)
-                    x_new = (x0 + delta) + self.momentum * (z - (x0 + delta)) + (
-                        1.0 - self.momentum
-                    ) * ((x0 + delta) - x_prev)
+                    x_new = (
+                        (x0 + delta)
+                        + self.momentum * (z - (x0 + delta))
+                        + (1.0 - self.momentum) * ((x0 + delta) - x_prev)
+                    )
                     x_new = torch.clamp(x_new, x0 - self.epsilon, x0 + self.epsilon)
                     x_new = torch.clamp(x_new, self.clip_min, self.clip_max)
                     x_prev = (x0 + delta).detach().clone()
@@ -123,14 +167,12 @@ class APGDAttack(AttackBase):
                     delta.grad = None
 
                 if ckpt_idx < len(checkpoints) and (step + 1) == checkpoints[ckpt_idx]:
-                    window = (
-                        checkpoints[ckpt_idx]
-                        - (checkpoints[ckpt_idx - 1] if ckpt_idx > 0 else 0)
+                    window = checkpoints[ckpt_idx] - (
+                        checkpoints[ckpt_idx - 1] if ckpt_idx > 0 else 0
                     )
                     cond1 = success_count < self.rho * window
-                    cond2 = (
-                        math.isclose(eta, eta_at_last_ckpt, rel_tol=1e-12)
-                        and not (loss_best < loss_at_last_ckpt - 1e-9)
+                    cond2 = math.isclose(eta, eta_at_last_ckpt, rel_tol=1e-12) and not (
+                        loss_best < loss_at_last_ckpt - 1e-9
                     )
                     if cond1 or cond2:
                         with torch.no_grad():

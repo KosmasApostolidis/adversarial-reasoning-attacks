@@ -20,7 +20,7 @@ mkdir -p "${HF_HOME}"
 HF_MODELS=(
   "Qwen/Qwen2.5-VL-7B-Instruct"
   "llava-hf/llava-v1.6-mistral-7b-hf"
-  # "meta-llama/Llama-3.2-11B-Vision-Instruct"   # Phase 2: requires HF_TOKEN + disk prune
+  "meta-llama/Llama-3.2-11B-Vision-Instruct"   # Phase 2: requires HF_TOKEN + disk prune
 )
 
 for repo in "${HF_MODELS[@]}"; do

@@ -1,7 +1,7 @@
 """Experiment runner.
 
 Loads ``configs/<exp>.yaml``, iterates over
-``models × tasks × attacks × epsilons × seeds × samples``, and records one
+``models x tasks x attacks x epsilons x seeds x samples``, and records one
 JSONL row per (benign, attacked) pair.
 
 Attack modes
@@ -67,7 +67,7 @@ class RunnerConfig:
 
 def _load_yaml(path: str | Path) -> dict:
     with Path(path).open("r", encoding="utf-8") as f:
-        return yaml.safe_load(f)
+        return dict(yaml.safe_load(f) or {})
 
 
 def load_runner_config(exp_path: str | Path) -> RunnerConfig:
@@ -86,15 +86,20 @@ def load_runner_config(exp_path: str | Path) -> RunnerConfig:
     )
 
 
-def resolve_epsilons(
-    cfg: RunnerConfig, attack_name: str, attacks_yaml: dict
-) -> list[float]:
+def resolve_epsilons(cfg: RunnerConfig, attack_name: str, attacks_yaml: dict) -> list[float]:
     overrides = cfg.attack_overrides.get(attack_name, {})
     if "epsilons" in overrides:
         return list(overrides["epsilons"])
     attack_cfg = attacks_yaml["attacks"].get(attack_name, {})
     eps = attack_cfg.get("epsilons")
-    return list(cfg.epsilons_linf) if eps in (None, []) else list(eps)
+    resolved = list(cfg.epsilons_linf) if eps in (None, []) else list(eps)
+    if not resolved:
+        raise ValueError(
+            f"No epsilons configured for attack {attack_name!r}. "
+            f"Set epsilons_linf in the experiment YAML or epsilons in "
+            f"attacks config under attacks.{attack_name}."
+        )
+    return resolved
 
 
 # ----------------------------- perturbation -----------------------------
@@ -109,9 +114,7 @@ def perturb_noise(image: Image.Image, epsilon: float, seed: int) -> Image.Image:
     return Image.fromarray((adv * 255.0).astype(np.uint8))
 
 
-def perturb(
-    mode: str, image: Image.Image, epsilon: float, seed: int, **_: Any
-) -> Image.Image:
+def perturb(mode: str, image: Image.Image, epsilon: float, seed: int, **_: Any) -> Image.Image:
     if mode == "noise":
         return perturb_noise(image, epsilon, seed)
     if mode in GRADIENT_MODES:
@@ -135,24 +138,40 @@ def build_attack(
     """Construct an attack instance given the runner ``--mode`` value."""
     if mode == "pgd":
         return PGDAttack(
-            epsilon=epsilon, steps=steps, random_restarts=1,
-            targeted=False, clip_min=clip_min, clip_max=clip_max,
+            epsilon=epsilon,
+            steps=steps,
+            random_restarts=1,
+            targeted=False,
+            clip_min=clip_min,
+            clip_max=clip_max,
         )
     if mode == "apgd":
         return APGDAttack(
-            epsilon=epsilon, steps=steps, random_restarts=1,
-            targeted=False, clip_min=clip_min, clip_max=clip_max,
+            epsilon=epsilon,
+            steps=steps,
+            random_restarts=1,
+            targeted=False,
+            clip_min=clip_min,
+            clip_max=clip_max,
         )
     if mode == "targeted_tool":
         return TargetedToolPGD(
-            epsilon=epsilon, steps=steps, random_restarts=1,
-            target_tool=target_tool, target_step_k=target_step_k,
-            clip_min=clip_min, clip_max=clip_max,
+            epsilon=epsilon,
+            steps=steps,
+            random_restarts=1,
+            target_tool=target_tool,
+            target_step_k=target_step_k,
+            clip_min=clip_min,
+            clip_max=clip_max,
         )
     if mode == "trajectory_drift":
         return TrajectoryDriftPGD(
-            epsilon=epsilon, steps=steps, random_restarts=1,
-            targeted=False, clip_min=clip_min, clip_max=clip_max,
+            epsilon=epsilon,
+            steps=steps,
+            random_restarts=1,
+            targeted=False,
+            clip_min=clip_min,
+            clip_max=clip_max,
         )
     raise ValueError(f"Unknown gradient attack mode: {mode}")
 
@@ -161,7 +180,11 @@ _NON_GEN_KEYS = frozenset({"pixel_values", "input_ids", "attention_mask"})
 
 
 def _build_attack_target(
-    *, mode: str, vlm: Any, benign: Trajectory, prompt_input_ids: Any,
+    *,
+    mode: str,
+    vlm: Any,
+    benign: Trajectory,
+    prompt_input_ids: Any,
     target_tool: str,
 ) -> Any:
     """Pick the right target-token builder for ``mode``."""
@@ -230,15 +253,16 @@ def run_gradient_attack(
     model_kwargs = {k: v for k, v in attack_in.items() if k not in _NON_GEN_KEYS}
 
     target_ids = _build_attack_target(
-        mode=mode, vlm=vlm, benign=benign,
-        prompt_input_ids=prompt_input_ids, target_tool=target_tool,
+        mode=mode,
+        vlm=vlm,
+        benign=benign,
+        prompt_input_ids=prompt_input_ids,
+        target_tool=target_tool,
     )
 
     fwd_kwargs: dict[str, Any] = dict(model_kwargs)
     if prompt_attn is not None:
-        fwd_kwargs["attention_mask"] = torch.cat(
-            [prompt_attn, torch.ones_like(target_ids)], dim=-1
-        )
+        fwd_kwargs["attention_mask"] = torch.cat([prompt_attn, torch.ones_like(target_ids)], dim=-1)
 
     attack = build_attack(
         mode,
@@ -336,13 +360,20 @@ def main(argv: list[str] | None = None) -> int:
         choices=["noise", "pgd", "apgd", "targeted_tool", "trajectory_drift"],
         default="noise",
     )
-    p.add_argument("--synthetic", action="store_true", help="Skip disk lookup, use synthetic images")
+    p.add_argument(
+        "--synthetic", action="store_true", help="Skip disk lookup, use synthetic images"
+    )
     p.add_argument("--split", default="dev")
     p.add_argument("--out", default=None, help="Override output_dir")
     p.add_argument("--max-steps", type=int, default=8)
     p.add_argument("--pgd-steps", type=int, default=20, help="Gradient-attack inner steps")
     p.add_argument("--target-tool", default="escalate_to_specialist", help="targeted_tool target")
     p.add_argument("--target-step-k", type=int, default=0, help="targeted_tool step index")
+    p.add_argument(
+        "--overwrite",
+        action="store_true",
+        help="Allow overwriting an existing records.jsonl (default: abort if exists)",
+    )
     args = p.parse_args(argv)
 
     cfg = load_runner_config(args.config)
@@ -352,8 +383,17 @@ def main(argv: list[str] | None = None) -> int:
     out_dir.mkdir(parents=True, exist_ok=True)
     records_path = out_dir / "records.jsonl"
 
+    if records_path.exists() and not args.overwrite:
+        print(
+            f"[runner] ERROR {records_path} exists. Pass --overwrite to replace, "
+            f"or use a different --out directory.",
+            file=__import__("sys").stderr,
+        )
+        return 1
+
     tools = default_registry()
     n_records = 0
+    n_errors = 0
     t0 = time.time()
 
     with records_path.open("w", encoding="utf-8") as f_out:
@@ -364,9 +404,7 @@ def main(argv: list[str] | None = None) -> int:
 
             for task_id in cfg.tasks:
                 t_override = cfg.task_overrides.get(task_id, {})
-                n_samples = int(
-                    t_override.get("dataset_split", {}).get(args.split, 0)
-                ) or None
+                n_samples = int(t_override.get("dataset_split", {}).get(args.split, 0)) or None
                 samples = list(
                     load_task(
                         task_id,
@@ -381,73 +419,89 @@ def main(argv: list[str] | None = None) -> int:
 
                 for sample in samples:
                     for seed in cfg.seeds:
-                        benign = agent.run(
-                            task_id=task_id,
-                            image=sample.image,
-                            prompt=sample.prompt,
-                            seed=seed,
-                            max_steps=args.max_steps,
-                        )
+                        try:
+                            benign = agent.run(
+                                task_id=task_id,
+                                image=sample.image,
+                                prompt=sample.prompt,
+                                seed=seed,
+                                max_steps=args.max_steps,
+                            )
 
-                        for attack_name in cfg.attacks:
-                            eps_list = resolve_epsilons(cfg, attack_name, attacks_yaml)
-                            for eps in eps_list:
-                                t_start = time.time()
-                                if args.mode in GRADIENT_MODES:
-                                    attacked = run_gradient_attack(
-                                        mode=args.mode,
-                                        vlm=vlm,
-                                        agent=agent,
-                                        sample=sample,
-                                        benign=benign,
+                            for attack_name in cfg.attacks:
+                                eps_list = resolve_epsilons(cfg, attack_name, attacks_yaml)
+                                for eps in eps_list:
+                                    t_start = time.time()
+                                    if args.mode in GRADIENT_MODES:
+                                        attacked = run_gradient_attack(
+                                            mode=args.mode,
+                                            vlm=vlm,
+                                            agent=agent,
+                                            sample=sample,
+                                            benign=benign,
+                                            epsilon=float(eps),
+                                            steps=args.pgd_steps,
+                                            seed=seed,
+                                            max_steps=args.max_steps,
+                                            task_id=task_id,
+                                            target_tool=args.target_tool,
+                                            target_step_k=args.target_step_k,
+                                        )
+                                    else:
+                                        adv_img = perturb(args.mode, sample.image, eps, seed)
+                                        attacked = agent.run(
+                                            task_id=task_id,
+                                            image=adv_img,
+                                            prompt=sample.prompt,
+                                            seed=seed,
+                                            max_steps=args.max_steps,
+                                        )
+                                    ed = trajectory_edit_distance(
+                                        benign.tool_sequence(),
+                                        attacked.tool_sequence(),
+                                        normalize=True,
+                                    )
+                                    rec = pair_record(
+                                        model_key=model_key,
+                                        task_id=task_id,
+                                        sample_id=sample.sample_id,
+                                        attack_name=attack_name,
+                                        attack_mode=args.mode,
                                         epsilon=float(eps),
-                                        steps=args.pgd_steps,
                                         seed=seed,
-                                        max_steps=args.max_steps,
-                                        task_id=task_id,
-                                        target_tool=args.target_tool,
-                                        target_step_k=args.target_step_k,
+                                        benign=benign,
+                                        attacked=attacked,
+                                        edit_distance=ed,
+                                        elapsed_s=time.time() - t_start,
                                     )
-                                else:
-                                    adv_img = perturb(args.mode, sample.image, eps, seed)
-                                    attacked = agent.run(
-                                        task_id=task_id,
-                                        image=adv_img,
-                                        prompt=sample.prompt,
-                                        seed=seed,
-                                        max_steps=args.max_steps,
-                                    )
-                                ed = trajectory_edit_distance(
-                                    benign.tool_sequence(),
-                                    attacked.tool_sequence(),
-                                    normalize=True,
-                                )
-                                rec = pair_record(
-                                    model_key=model_key,
-                                    task_id=task_id,
-                                    sample_id=sample.sample_id,
-                                    attack_name=attack_name,
-                                    attack_mode=args.mode,
-                                    epsilon=float(eps),
-                                    seed=seed,
-                                    benign=benign,
-                                    attacked=attacked,
-                                    edit_distance=ed,
-                                    elapsed_s=time.time() - t_start,
-                                )
-                                f_out.write(json.dumps(rec, default=str) + "\n")
-                                n_records += 1
+                                    f_out.write(json.dumps(rec, default=str) + "\n")
+                                    n_records += 1
+                        except Exception:
+                            n_errors += 1
+                            print(
+                                f"[runner] ERROR model={model_key} task={task_id} "
+                                f"sample={sample.sample_id} seed={seed} — skipping",
+                                file=__import__("sys").stderr,
+                            )
+                            import traceback
+
+                            traceback.print_exc()
 
     elapsed = time.time() - t0
     summary = {
         "experiment": cfg.name,
         "records": n_records,
+        "errors": n_errors,
         "elapsed_s": elapsed,
         "records_path": str(records_path),
     }
     (out_dir / "summary.json").write_text(json.dumps(summary, indent=2))
-    print(f"[runner] done. {n_records} records in {elapsed:.1f}s → {records_path}")
-    return 0
+    print(
+        f"[runner] done. {n_records} record(s)"
+        + (f", {n_errors} error(s)" if n_errors else "")
+        + f" in {elapsed:.1f}s → {records_path}"
+    )
+    return 0 if n_errors == 0 else 2
 
 
 if __name__ == "__main__":
