@@ -71,12 +71,13 @@ class PGDAttack(AttackBase):
             x0 = x0.unsqueeze(0)
 
         alpha = self.alpha if self.alpha is not None else self.epsilon / 4.0
-        # Sign convention preserved from pre-refactor behaviour: untargeted
-        # uses ``+alpha*sign(grad)`` on ``loss = -CE`` (loop ascends on loss);
-        # targeted uses ``-alpha*sign(grad)`` on ``loss = +CE`` (loop descends
-        # on CE). ``TokenTargetLoss`` carries the sign of CE; this flag
-        # carries the loop direction.
-        step_sign = -1.0 if self.targeted else 1.0
+        # TokenTargetLoss already encodes targeted/untargeted semantics via
+        # ±CE. The loop always descends on the returned scalar (step_sign=-1)
+        # so that:
+        #   untargeted (loss=-CE):  -sign(grad(-CE)) = +sign(grad(CE)) → CE↑
+        #   targeted   (loss=+CE):  -sign(grad(+CE)) = -sign(grad(CE)) → CE↓
+        # APGD uses the same convention (``- sign * eta * grad.sign()``).
+        step_sign = -1.0
 
         return linf_pgd_loop(
             loss_fn=TokenTargetLoss(targeted=self.targeted),

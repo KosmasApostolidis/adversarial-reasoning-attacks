@@ -88,7 +88,7 @@ class TrajectoryDriftPGD(AttackBase):
             alpha=alpha,
             n_iter=self.steps,
             n_restarts=self.random_restarts,
-            step_sign=1.0,  # always ascend on -KL
+            step_sign=-1.0,  # descend on -KL ⇒ ascend on KL (diverge from benign)
             clip_min=self.clip_min,
             clip_max=self.clip_max,
             seed=self.seed,
