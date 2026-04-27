@@ -134,9 +134,7 @@ def test_build_stats_table_writes_booktabs(tmp_path: Path) -> None:
     runs_dir = tmp_path / "runs"
     _populate_runs_dir(runs_dir)
     out_path = tmp_path / "paper" / "tables" / "main_benchmark.tex"
-    rc = bst.build_stats_table(
-        runs_dir, out_path, n_resamples=200, ci_level=0.95, q=0.05
-    )
+    rc = bst.build_stats_table(runs_dir, out_path, n_resamples=200, ci_level=0.95, q=0.05)
     assert rc == 0
     assert out_path.exists()
     content = out_path.read_text(encoding="utf-8")
@@ -150,12 +148,82 @@ def test_build_stats_table_marks_significant_cells(tmp_path: Path) -> None:
     runs_dir = tmp_path / "runs"
     _populate_runs_dir(runs_dir, attacked_offset=0.5)
     out_path = tmp_path / "out.tex"
-    rc = bst.build_stats_table(
-        runs_dir, out_path, n_resamples=200, ci_level=0.95, q=0.05
-    )
+    rc = bst.build_stats_table(runs_dir, out_path, n_resamples=200, ci_level=0.95, q=0.05)
     assert rc == 0
     content = out_path.read_text(encoding="utf-8")
     assert "$^{*}$" in content, "Large attacked-vs-noise gap must survive BH at q=0.05"
+
+
+def test_build_stats_table_is_deterministic_with_pinned_seed(tmp_path: Path) -> None:
+    """Two runs with the same ``bootstrap_seed`` must emit byte-identical
+    output — guards against silent CI drift across paper recompiles."""
+    runs_dir = tmp_path / "runs"
+    _populate_runs_dir(runs_dir)
+    out_a = tmp_path / "a.tex"
+    out_b = tmp_path / "b.tex"
+    bst.build_stats_table(runs_dir, out_a, n_resamples=200, bootstrap_seed=0)
+    bst.build_stats_table(runs_dir, out_b, n_resamples=200, bootstrap_seed=0)
+    assert (
+        out_a.read_bytes() == out_b.read_bytes()
+    ), "bootstrap_seed=0 must produce identical output across runs"
+
+
+def test_stats_rows_carry_pvalue_status(tmp_path: Path) -> None:
+    """Each row must report whether the Wilcoxon p-value was computed
+    cleanly or fell back. Distinguishes 'truly non-significant' from
+    'computation failed' — both previously collapsed to pvalue=1.0."""
+    # Force all-zero deltas → Wilcoxon raises ValueError ("zero-method='wilcox' ... all zero")
+    rows: list[dict] = []
+    for seed in range(5):
+        for sample_idx in range(4):
+            rows.append(
+                _record(
+                    model_key="m",
+                    task_id="t",
+                    attack_mode="noise",
+                    attack_name="noise",
+                    epsilon=0.0157,
+                    seed=seed,
+                    sample_id=f"s{sample_idx}",
+                    edit_distance=0.1,
+                )
+            )
+            rows.append(
+                _record(
+                    model_key="m",
+                    task_id="t",
+                    attack_mode="pgd",
+                    attack_name="pgd_linf",
+                    epsilon=0.0157,
+                    seed=seed,
+                    sample_id=f"s{sample_idx}",
+                    edit_distance=0.1,
+                )
+            )
+    runs_dir = tmp_path / "runs"
+    _write_jsonl(
+        runs_dir / "noise" / "records.jsonl", [r for r in rows if r["attack_mode"] == "noise"]
+    )
+    _write_jsonl(runs_dir / "pgd" / "records.jsonl", [r for r in rows if r["attack_mode"] == "pgd"])
+    # Build cells + stats directly to inspect row dicts (LaTeX hides the column).
+    runs = bst._load_runs_dir(runs_dir)
+    baseline = bst._noise_baseline(runs["noise"])
+    cells = bst._build_cells(runs["pgd"], baseline)
+    stat_rows = bst._stats_per_cell(cells, n_resamples=100, ci_level=0.95, bootstrap_seed=0)
+    assert stat_rows, "should have at least one stats row"
+    for row in stat_rows:
+        assert "pvalue_status" in row, "missing pvalue_status sentinel"
+        assert row["pvalue_status"] in {
+            "ok",
+            "valuerror",
+            "nan",
+        }, f"unexpected status {row['pvalue_status']!r}"
+    # All-zero deltas force scipy.wilcoxon into a degenerate path
+    # (NaN p-value, or ValueError depending on scipy version). Either
+    # is fine — the contract is that it MUST NOT silently report ok.
+    assert any(
+        row["pvalue_status"] in {"valuerror", "nan"} for row in stat_rows
+    ), "all-zero deltas must surface as a non-ok status, not silently ok"
 
 
 def test_build_stats_table_aborts_when_no_noise_records(tmp_path: Path) -> None:

@@ -36,12 +36,13 @@ from .loss import TokenTargetLoss
 class PGDAttack(AttackBase):
     name: str = "pgd_linf"
     epsilon: float = 8.0 / 255.0
-    alpha: float | None = None           # step size; default = epsilon / 4
+    alpha: float | None = None  # step size; default = epsilon / 4
     steps: int = 40
     random_restarts: int = 1
     targeted: bool = False
     clip_min: float = 0.0
     clip_max: float = 1.0
+    seed: int | None = None  # pin RNG for reproducible restarts
 
     def run(
         self,
@@ -63,9 +64,7 @@ class PGDAttack(AttackBase):
             `vlm.prepare_attack_inputs(...)` before calling `run`.
         """
         if not getattr(vlm, "supports_gradients", False):
-            raise ValueError(
-                f"VLM backend {vlm.__class__.__name__} does not support gradients."
-            )
+            raise ValueError(f"VLM backend {vlm.__class__.__name__} does not support gradients.")
 
         x0 = image.detach().clone()
         if x0.ndim == 3:
@@ -94,4 +93,5 @@ class PGDAttack(AttackBase):
             clip_min=self.clip_min,
             clip_max=self.clip_max,
             static_metadata={"targeted": self.targeted},
+            seed=self.seed,
         )

@@ -8,34 +8,48 @@ Replaces the per-script duplicates:
 - ``_panel`` / ``_panel_label``                    → :func:`panel_label`
 - ``make_palette`` / ``_tool_palette``             → :func:`tool_palette`
 """
+
 from __future__ import annotations
 
 import json
+import logging
 from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
 
 import matplotlib.pyplot as plt
 
+logger = logging.getLogger(__name__)
+
 PALETTE20: tuple[tuple[float, float, float], ...] = tuple(
     plt.get_cmap("tab20").colors  # type: ignore[attr-defined]
 )
 
 
-def load_records(*paths: str | Path) -> list[dict[str, Any]]:
+def load_records(*paths: str | Path, strict: bool = False) -> list[dict[str, Any]]:
     """Load and concatenate JSONL records from one or more files.
 
-    Missing files are silently skipped (matches existing
-    ``make_attack_landscape`` / ``make_hero_figures`` behaviour). Empty lines
-    are ignored.
+    Missing files are skipped with a ``logging.WARNING`` (previously
+    silent — empty plots are easy to miss when a path drifts from the
+    runner's output dir). Empty lines are ignored.
+
+    If ``strict=True``, raises ``ValueError`` when zero records are
+    collected across all paths — use this in figure scripts that should
+    not produce empty PNGs silently.
     """
     out: list[dict[str, Any]] = []
     for p in paths:
         path = Path(p)
         if not path.exists():
+            logger.warning("load_records: skipping missing file %s", path)
             continue
         with path.open("r", encoding="utf-8") as f:
             out.extend(json.loads(line) for line in f if line.strip())
+    if strict and not out:
+        raise ValueError(
+            f"load_records(strict=True) collected 0 records from {len(paths)} "
+            f"path(s); refusing to render an empty figure"
+        )
     return out
 
 

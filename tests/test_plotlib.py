@@ -1,4 +1,5 @@
 """Smoke tests for shared figure-script plotlib helpers."""
+
 # ruff: noqa: I001 — matplotlib.use("Agg") must run before importing pyplot.
 from __future__ import annotations
 
@@ -7,6 +8,7 @@ import sys
 from pathlib import Path
 
 import matplotlib
+
 matplotlib.use("Agg")  # headless
 import matplotlib.pyplot as plt
 import pytest
@@ -35,10 +37,29 @@ def test_load_records_basic(tmp_records: Path) -> None:
     assert out == [{"id": "a", "x": 1}, {"id": "b", "x": 2}]
 
 
-def test_load_records_skips_missing(tmp_path: Path, tmp_records: Path) -> None:
+def test_load_records_skips_missing_with_warning(
+    tmp_path: Path, tmp_records: Path, caplog: pytest.LogCaptureFixture
+) -> None:
     missing = tmp_path / "nope.jsonl"
-    out = load_records(missing, tmp_records)
-    assert len(out) == 2  # missing silently skipped
+    with caplog.at_level("WARNING", logger="_plotlib"):
+        out = load_records(missing, tmp_records)
+    assert len(out) == 2, "missing file must still be skipped, not crash"
+    assert any(
+        "missing file" in r.message and "nope.jsonl" in r.message for r in caplog.records
+    ), "skipping a missing file must emit a WARNING log line"
+
+
+def test_load_records_strict_raises_when_empty(tmp_path: Path) -> None:
+    missing = tmp_path / "nope.jsonl"
+    with pytest.raises(ValueError, match="0 records"):
+        load_records(missing, strict=True)
+
+
+def test_load_records_strict_passes_when_records_present(
+    tmp_records: Path,
+) -> None:
+    out = load_records(tmp_records, strict=True)
+    assert len(out) == 2
 
 
 def test_load_records_skips_blank_lines(tmp_path: Path) -> None:

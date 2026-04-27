@@ -35,6 +35,7 @@ def linf_pgd_loop(
     clip_min: float = 0.0,
     clip_max: float = 1.0,
     static_metadata: dict[str, Any] | None = None,
+    seed: int | None = None,
 ) -> AttackResult:
     """L-inf sign-SGD: ``delta := clip[ delta + step_sign * alpha * sign(grad) ]``.
 
@@ -50,6 +51,29 @@ def linf_pgd_loop(
     """
     best: AttackResult | None = None
     extra = static_metadata or {}
+
+    # ε=0 ⇒ no admissible perturbation; running the loop would burn
+    # ``n_iter * n_restarts`` forward passes producing exactly zero δ.
+    # Note: ``grad.sign()`` returns 0 in saturated regions where ``grad==0``,
+    # which can stall progress with no visible error — a known limitation
+    # of sign-SGD and not currently mitigated here.
+    if epsilon == 0.0:
+        zero_delta = torch.zeros_like(x0)
+        perturbed = torch.clamp(x0, clip_min, clip_max)
+        return AttackResult(
+            perturbed_image=perturbed.squeeze(0) if perturbed.shape[0] == 1 else perturbed,
+            delta=zero_delta.squeeze(0) if zero_delta.shape[0] == 1 else zero_delta,
+            loss_final=float("nan"),
+            loss_trajectory=[],
+            iterations=0,
+            success=False,
+            metadata={"epsilon": epsilon, "alpha": alpha, "short_circuit": "epsilon_zero", **extra},
+        )
+
+    if seed is not None:
+        torch.manual_seed(seed)
+        if torch.cuda.is_available():
+            torch.cuda.manual_seed_all(seed)
 
     for restart in range(n_restarts):
         delta = torch.empty_like(x0).uniform_(-epsilon, epsilon)
@@ -83,7 +107,14 @@ def linf_pgd_loop(
                 **extra,
             },
         )
-        if best is None or candidate.loss_final < best.loss_final:
+        # NaN guard: ``finite < NaN`` is False, so a NaN-loss first restart
+        # would otherwise lock ``best`` and discard every legitimate later
+        # restart. Prefer any finite restart over a NaN one.
+        if (
+            best is None
+            or math.isfinite(candidate.loss_final)
+            and (not math.isfinite(best.loss_final) or candidate.loss_final < best.loss_final)
+        ):
             best = candidate
 
     assert best is not None

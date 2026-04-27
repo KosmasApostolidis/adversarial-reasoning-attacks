@@ -37,6 +37,7 @@ class TargetedToolPGD(AttackBase):
     target_step_k: int = 0
     clip_min: float = 0.0
     clip_max: float = 1.0
+    seed: int | None = None
 
     def run(
         self,
@@ -56,6 +57,7 @@ class TargetedToolPGD(AttackBase):
             targeted=True,
             clip_min=self.clip_min,
             clip_max=self.clip_max,
+            seed=self.seed,
         )
         result = proxy.run(
             vlm=vlm,
