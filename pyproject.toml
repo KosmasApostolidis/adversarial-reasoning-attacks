@@ -33,6 +33,7 @@ dependencies = [
     # Core ML
     "torch>=2.6.0",
     "transformers>=4.45",
+    "sentencepiece>=0.2.0",
     "accelerate>=1.1",
     "bitsandbytes>=0.43",
     "safetensors>=0.4",
