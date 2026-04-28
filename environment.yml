@@ -30,6 +30,7 @@ dependencies:
   # Pip-only deps (no conda-forge build or version-pinned to wheels)
   - pip:
       - transformers>=4.45
+      - sentencepiece>=0.2.0
       - accelerate>=1.1
       - bitsandbytes>=0.43
       - safetensors>=0.4
