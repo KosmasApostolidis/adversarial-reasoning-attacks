@@ -6,10 +6,10 @@ import base64
 import io
 import os
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, cast
 
 from PIL import Image
-from tenacity import retry, stop_after_attempt, wait_exponential
+from tenacity import Retrying, stop_after_attempt, wait_exponential
 
 from .base import VLMBase, VLMGenerateResult
 
@@ -51,17 +51,37 @@ class OllamaVLMClient(VLMBase):
         self.model_id = ollama_tag
         self.family = family
         self.settings = settings or OllamaSettings()
-        self._client = ollama.Client(host=self.settings.host)
-
-    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=1, max=10))
-    def _chat(self, messages: list[dict[str, Any]], temperature: float) -> dict[str, Any]:
-        return dict(
-            self._client.chat(
-                model=self.model_id,
-                messages=messages,
-                options={"temperature": temperature},
-            )
+        self._client = ollama.Client(
+            host=self.settings.host, timeout=self.settings.request_timeout_s
         )
+
+    def _chat_once(
+        self,
+        messages: list[dict[str, Any]],
+        options: dict[str, Any],
+        tools: list[dict] | None,
+    ) -> dict[str, Any]:
+        kwargs: dict[str, Any] = {
+            "model": self.model_id,
+            "messages": messages,
+            "options": options,
+        }
+        if tools is not None:
+            kwargs["tools"] = tools
+        return dict(self._client.chat(**kwargs))
+
+    def _chat(
+        self,
+        messages: list[dict[str, Any]],
+        options: dict[str, Any],
+        tools: list[dict] | None,
+    ) -> dict[str, Any]:
+        retryer = Retrying(
+            stop=stop_after_attempt(self.settings.max_retries),
+            wait=wait_exponential(multiplier=1, min=1, max=10),
+            reraise=True,
+        )
+        return cast(dict[str, Any], retryer(self._chat_once, messages, options, tools))
 
     def generate(
         self,
@@ -81,7 +101,13 @@ class OllamaVLMClient(VLMBase):
         b64 = base64.b64encode(buf.getvalue()).decode("ascii")
 
         messages = [{"role": "user", "content": prompt, "images": [b64]}]
-        response = self._chat(messages, temperature)
+        options: dict[str, Any] = {
+            "temperature": temperature,
+            "num_predict": max_new_tokens,
+        }
+        if seed is not None:
+            options["seed"] = seed
+        response = self._chat(messages, options, tools_schema)
         return VLMGenerateResult(
             text=response.get("message", {}).get("content", ""),
             finish_reason=response.get("done_reason", "stop"),
