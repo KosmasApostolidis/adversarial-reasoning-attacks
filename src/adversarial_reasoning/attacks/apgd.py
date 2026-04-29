@@ -109,7 +109,13 @@ class APGDAttack(AttackBase):
         loss_fn = TokenTargetLoss(targeted=self.targeted)
         gen_kwargs = forward_kwargs or {}
         checkpoints = _checkpoints(self.steps)
-        sign = -1.0 if self.targeted else 1.0  # smaller-loss-is-better convention
+        # Always descend on the loss returned by ``loss_fn``. ``TokenTargetLoss``
+        # already encodes the attacker's intent via its ``targeted`` flag
+        # (returns ``-CE`` untargeted, ``+CE`` targeted). PGD uses the same
+        # convention via ``step_sign=-1`` in :func:`linf_pgd_loop`. A previous
+        # version flipped ``sign`` based on ``targeted``, which silently turned
+        # targeted APGD into a gradient *ascent* on CE — the opposite of intent.
+        step_sign = -1.0
 
         if self.seed is not None:
             torch.manual_seed(self.seed)
@@ -151,7 +157,7 @@ class APGDAttack(AttackBase):
                 grad = torch.autograd.grad(loss, delta, retain_graph=False)[0]
 
                 with torch.no_grad():
-                    z = x0 + delta - sign * eta * grad.sign()
+                    z = x0 + delta + step_sign * eta * grad.sign()
                     z = torch.clamp(z, x0 - self.epsilon, x0 + self.epsilon)
                     z = torch.clamp(z, self.clip_min, self.clip_max)
                     x_new = (

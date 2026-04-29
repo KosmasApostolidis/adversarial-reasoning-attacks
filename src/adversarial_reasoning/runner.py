@@ -283,7 +283,10 @@ def run_gradient_attack(
     if perturbed_pv.ndim == pixel_values.ndim - 1:
         perturbed_pv = perturbed_pv.unsqueeze(0)
     if perturbed_pv.shape != pixel_values.shape:
-        perturbed_pv = perturbed_pv.view(pixel_values.shape)
+        # ``.reshape`` falls back to a copy when the tensor isn't contiguous;
+        # ``.view`` would raise after squeeze/unsqueeze chains in the attack
+        # leave the storage non-contiguous.
+        perturbed_pv = perturbed_pv.reshape(pixel_values.shape)
 
     attacked = agent.run_with_pixel_values(
         task_id=task_id,

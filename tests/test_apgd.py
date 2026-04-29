@@ -172,7 +172,15 @@ def test_apgd_respects_epsilon_budget() -> None:
 
 
 @pytest.mark.smoke
-def test_apgd_targeted_reduces_loss() -> None:
+def test_apgd_targeted_descends_loss() -> None:
+    """Targeted APGD must STRICTLY descend its loss on the linear stub.
+
+    Regression for a sign-convention bug where ``targeted=True`` flipped the
+    update direction, turning the descent into an ascent that pushed the
+    attacker AWAY from the target tool. The ``<`` (not ``<=``) catches the
+    bug — the broken implementation produced a final loss > initial loss.
+    """
+    torch.manual_seed(7)
     vlm = _LinearStubVLM()
     image = torch.rand(3, 8, 8)
     prompt = torch.zeros(1, 1, dtype=torch.long)
@@ -183,9 +191,35 @@ def test_apgd_targeted_reduces_loss() -> None:
         steps=20,
         random_restarts=1,
         targeted=True,
+        seed=0,
     )
     result = attack.run(vlm, image, prompt, target)
-    assert result.loss_trajectory[-1] <= result.loss_trajectory[0]
+    assert result.loss_trajectory[-1] < result.loss_trajectory[0]
+    assert result.loss_final < result.loss_trajectory[0]
+
+
+@pytest.mark.smoke
+def test_apgd_untargeted_ascends_ce() -> None:
+    """Untargeted APGD must drive ``-CE`` down (i.e. CE up). Symmetric guard
+    on the sign convention; a regression that flipped both modes would still
+    keep this passing only if the untargeted branch happened to align.
+    """
+    torch.manual_seed(11)
+    vlm = _LinearStubVLM()
+    image = torch.rand(3, 8, 8)
+    prompt = torch.zeros(1, 1, dtype=torch.long)
+    target = torch.tensor([[3]], dtype=torch.long)
+
+    attack = APGDAttack(
+        epsilon=16.0 / 255.0,
+        steps=20,
+        random_restarts=1,
+        targeted=False,
+        seed=0,
+    )
+    result = attack.run(vlm, image, prompt, target)
+    # Untargeted loss is ``-CE``; descent on -CE means CE rises.
+    assert result.loss_trajectory[-1] < result.loss_trajectory[0]
 
 
 @pytest.mark.smoke

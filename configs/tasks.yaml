@@ -33,7 +33,6 @@ tasks:
     max_steps: 8
     oracle_strategy: vlm_self_consistency   # per-model baseline, not medical ground truth
     oracle_seeds: 3
-    oracle_temperature: 0.0
 
   rad_vqa_action:
     phase: ["1", "2"]
@@ -54,7 +53,6 @@ tasks:
     max_steps: 5
     oracle_strategy: vlm_self_consistency
     oracle_seeds: 3
-    oracle_temperature: 0.0
 
   prostate_mri_targeted:
     phase: ["2"]
