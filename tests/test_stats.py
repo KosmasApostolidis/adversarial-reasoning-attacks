@@ -41,3 +41,31 @@ def test_bh_controls_fdr_under_global_null():
     rejected = benjamini_hochberg(pvalues, q=0.05)
     # Under the global null the expected number of rejections is very small.
     assert rejected.sum() < 20
+
+
+def test_bootstrap_ci_rejects_empty_sample():
+    import pytest
+
+    with pytest.raises(ValueError, match="non-empty"):
+        bootstrap_ci(np.array([]), n_resamples=10)
+
+
+def test_bootstrap_ci_rejects_nonpositive_resamples():
+    import pytest
+
+    with pytest.raises(ValueError, match="n_resamples"):
+        bootstrap_ci(np.array([1.0, 2.0]), n_resamples=0)
+
+
+def test_benjamini_hochberg_rejects_q_out_of_range():
+    import pytest
+
+    p = np.array([0.01, 0.02, 0.5])
+    with pytest.raises(ValueError, match=r"q must be in"):
+        benjamini_hochberg(p, q=0.0)
+    with pytest.raises(ValueError, match=r"q must be in"):
+        benjamini_hochberg(p, q=1.0)
+    with pytest.raises(ValueError, match=r"q must be in"):
+        benjamini_hochberg(p, q=-0.1)
+    with pytest.raises(ValueError, match=r"q must be in"):
+        benjamini_hochberg(p, q=1.5)

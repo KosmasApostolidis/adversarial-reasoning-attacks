@@ -80,6 +80,10 @@ def bootstrap_ci(
     arr = np.asarray(sample, dtype=float)
     if arr.ndim != 1:
         raise ValueError("sample must be 1-D")
+    if arr.size == 0:
+        raise ValueError("sample must be non-empty")
+    if n_resamples <= 0:
+        raise ValueError("n_resamples must be positive")
 
     rng = np.random.default_rng(rng_seed)
     stat_fn: Any = {
@@ -113,6 +117,8 @@ def benjamini_hochberg(
     Matches the behaviour of statsmodels.stats.multitest.multipletests(method='fdr_bh')
     but avoids the dependency for this core function.
     """
+    if not 0 < q < 1:
+        raise ValueError("q must be in (0, 1)")
     p = np.asarray(pvalues, dtype=float)
     if p.ndim != 1:
         raise ValueError("pvalues must be 1-D")

@@ -44,6 +44,12 @@ class TestFlipRate:
         attack = [["a", "b"]]
         assert flip_rate_at_step(benign, attack, step_k=2) == 1.0
 
+    def test_negative_step_k_raises(self):
+        import pytest
+
+        with pytest.raises(ValueError, match="step_k must be >= 0"):
+            flip_rate_at_step([["a"]], [["b"]], step_k=-1)
+
 
 class TestTargetedHitRate:
     def test_hit_anywhere(self):
@@ -57,6 +63,29 @@ class TestTargetedHitRate:
     def test_miss_at_step(self):
         batch = [["a", "x"], ["a", "x"]]
         assert targeted_hit_rate(batch, "x", step_k=0) == 0.0
+
+    def test_negative_step_k_raises(self):
+        import pytest
+
+        with pytest.raises(ValueError, match="step_k must be >= 0"):
+            targeted_hit_rate([["a"]], "a", step_k=-1)
+
+
+class TestLevenshteinParity:
+    """Verify the Levenshtein C-binding matches the pure-numpy DP path on
+    list-of-string inputs (multi-character tokens). Both paths must agree
+    so output is deterministic regardless of which import resolved."""
+
+    def test_multi_char_tokens(self):
+        from adversarial_reasoning.metrics.trajectory import _levenshtein_dp
+
+        a = ["a", "bb", "c"]
+        b = ["a", "cc"]
+        # Distance computed via the public function (uses C binding when present).
+        public = trajectory_edit_distance(a, b, normalize=False)
+        # Pure-numpy DP fallback.
+        dp = _levenshtein_dp(a, b)
+        assert public == float(dp) == 2.0
 
 
 class TestParamL1:
