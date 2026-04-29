@@ -34,10 +34,6 @@
 #   SKIP_FIGURES=1 scripts/run_full_attack_pipeline.sh         # sweep only, no figures
 #   SKIP_TABLE=1   scripts/run_full_attack_pipeline.sh         # no stats table
 #
-# Required env (only when running gradient/llava modes):
-#   HF_TOKEN                  HuggingFace token (gated Llama-3.2-Vision).
-#                             Not required for `noise`-only runs.
-#
 # Optional env:
 #   AR_PROSTATEX_BHI_ROOT     ProstateX cv_folds path (default: data/prostatex/processed/cv_folds)
 #   HF_HOME                   HF cache dir (default: $REPO_ROOT/.hf_cache)
@@ -54,7 +50,6 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
 
 VALID_MODES=(noise pgd apgd trajectory_drift targeted_tool)
-HF_GATED_MODES=(pgd apgd trajectory_drift targeted_tool)
 
 is_in() {
     local needle="$1"; shift
@@ -77,14 +72,6 @@ for mode in "${MODES[@]}"; do
 done
 
 # --- preflight ---------------------------------------------------------
-needs_hf=0
-for mode in "${MODES[@]}"; do
-    if is_in "$mode" "${HF_GATED_MODES[@]}"; then needs_hf=1; break; fi
-done
-if [[ "$needs_hf" -eq 1 ]]; then
-    : "${HF_TOKEN:?HF_TOKEN is required for gradient/targeted modes (gated Llama-3.2-Vision)}"
-fi
-
 export HF_HOME="${HF_HOME:-$REPO_ROOT/.hf_cache}"
 export AR_PROSTATEX_BHI_ROOT="${AR_PROSTATEX_BHI_ROOT:-$REPO_ROOT/data/prostatex/processed/cv_folds}"
 
@@ -145,8 +132,22 @@ else
             continue
         fi
 
+        # Dedup splits by resolved fold_tag so train/val (both -> fold_1) don't
+        # silently overwrite each other's records.jsonl. Hard-fail unmapped splits
+        # so typos like FOLDS="trian" don't create orphan dirs the aggregator drops.
+        declare -A SEEN_FOLDS=()
         for split in "${SPLITS[@]}"; do
-            fold_tag="${SPLIT_TO_FOLD[$split]:-$split}"
+            fold_tag="${SPLIT_TO_FOLD[$split]:-}"
+            if [[ -z "$fold_tag" ]]; then
+                echo "[full-pipeline] FATAL: split '$split' not in SPLIT_TO_FOLD (valid: ${!SPLIT_TO_FOLD[*]})" >&2
+                exit 2
+            fi
+            if [[ -n "${SEEN_FOLDS[$fold_tag]:-}" ]]; then
+                warn "split '$split' maps to '$fold_tag' already covered by '${SEEN_FOLDS[$fold_tag]}' -- skipping"
+                continue
+            fi
+            SEEN_FOLDS[$fold_tag]="$split"
+
             OUT_DIR="$RUN_ROOT/$mode/$fold_tag"
             LOG="$LOG_DIR/${mode}_${fold_tag}_${TS}.log"
 
@@ -167,6 +168,7 @@ else
 
             echo "[full-pipeline] <<< mode=$mode  fold=$fold_tag  done"
         done
+        unset SEEN_FOLDS
     done
 
     echo "[full-pipeline] sweep complete  ts=$TS"
@@ -178,9 +180,12 @@ fi
 # path runs/main/<mode>/records.jsonl. Build that aggregate from the per-fold
 # files so they Just Work.
 echo "[full-pipeline] concatenating per-fold records.jsonl"
-for mode_dir in "$RUN_ROOT"/*/; do
-    mode=$(basename "$mode_dir")
-    [[ "$mode" == "_logs" || "$mode" == "_per_model" ]] && continue
+# Restrict aggregation to the current MODES so that running a subset (e.g.
+# MODES=apgd) does NOT rebuild stale aggregates for other modes from on-disk
+# per-fold dirs of unknown vintage.
+for mode in "${MODES[@]}"; do
+    mode_dir="$RUN_ROOT/$mode"
+    [[ -d "$mode_dir" ]] || { warn "no mode dir $mode_dir; skipping aggregate"; continue; }
     out="$mode_dir/records.jsonl"
     shopt -s nullglob
     fold_files=("$mode_dir"/fold_*/records.jsonl)
@@ -192,8 +197,11 @@ for mode_dir in "$RUN_ROOT"/*/; do
     : > "$out"
     for jf in "${fold_files[@]}"; do
         cat "$jf" >> "$out"
+        # Guarantee newline boundary between concatenated jsonls in case a
+        # fold's last record lacks a trailing \n.
+        [[ -s "$jf" ]] && [[ "$(tail -c 1 "$jf"; echo .)" != $'\n.' ]] && echo "" >> "$out"
     done
-    n=$(wc -l < "$out")
+    n=$(grep -c '' "$out" || echo 0)
     echo "[full-pipeline] aggregated $out  ($n lines)"
 done
 

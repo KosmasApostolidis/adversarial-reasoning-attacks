@@ -7,6 +7,7 @@ images so smoke / CI can exercise the full pipeline without TCIA access.
 
 from __future__ import annotations
 
+import hashlib
 from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
@@ -14,6 +15,18 @@ from pathlib import Path
 import numpy as np
 import yaml
 from PIL import Image
+
+
+def _stable_seed(*parts: object) -> int:
+    """Deterministic 32-bit seed from a tuple of parts.
+
+    Replaces ``hash(tuple)`` because Python's built-in ``hash`` is randomised
+    per-process unless ``PYTHONHASHSEED`` is pinned, which broke synthetic-image
+    reproducibility across runs of the synthetic-fallback path.
+    """
+    payload = "|".join(str(p) for p in parts).encode("utf-8")
+    digest = hashlib.blake2b(payload, digest_size=4).digest()
+    return int.from_bytes(digest, "big")
 
 
 @dataclass(frozen=True)
@@ -159,7 +172,7 @@ def load_task(
         if i < len(real):
             sample_id, img = real[i]
         else:
-            img = _synthetic_image(seed=hash((task_id, split, i)) & 0xFFFFFFFF)
+            img = _synthetic_image(seed=_stable_seed(task_id, split, i))
             sample_id = f"synthetic_{split}_{i:04d}"
         yield TaskSample(task_id=task_id, sample_id=sample_id, image=img, prompt=prompt)
 

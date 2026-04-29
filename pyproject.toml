@@ -116,6 +116,7 @@ select = [
 ]
 ignore = [
     "E501",  # handled by formatter
+    "RUF001",  # ambiguous unicode in string literal (ε, ×, –, ≤ in matplotlib labels)
     "RUF002",  # ambiguous unicode in docstring (ρ, ε, ×, ≤ etc. are intentional math glyphs)
     "RUF003",  # ambiguous unicode in comment (same rationale)
 ]

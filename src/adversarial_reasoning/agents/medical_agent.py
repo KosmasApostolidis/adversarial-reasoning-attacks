@@ -8,7 +8,7 @@ to bend this sequence, and metrics compare attacked vs benign versions.
 from __future__ import annotations
 
 import json
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from PIL import Image
 
@@ -26,7 +26,7 @@ class MedicalAgent(AgentBase):
         vlm: VLMBase,
         tools: ToolRegistry,
         *,
-        tool_mode: str = "auto",   # 'native' | 'prompt_scaffold' | 'auto'
+        tool_mode: str = "auto",  # 'native' | 'prompt_scaffold' | 'auto'
     ) -> None:
         self.vlm = vlm
         self.tools = tools
@@ -62,7 +62,7 @@ class MedicalAgent(AgentBase):
                 image=image,
                 prompt=running_prompt,
                 temperature=0.0,
-                seed=seed + step,
+                seed=seed * max_steps + step,
                 tools_schema=tool_schema,
                 max_new_tokens=512,
             )
@@ -90,7 +90,7 @@ class MedicalAgent(AgentBase):
     def run_with_pixel_values(
         self,
         task_id: str,
-        pixel_values: "torch.Tensor",
+        pixel_values: torch.Tensor,
         prompt: str,
         *,
         template_image: Image.Image,
@@ -140,7 +140,7 @@ class MedicalAgent(AgentBase):
                 prompt=running_prompt,
                 template_image=template_image,
                 temperature=0.0,
-                seed=seed + step,
+                seed=seed * max_steps + step,
                 tools_schema=tool_schema,
                 max_new_tokens=512,
                 **gen_extras,
@@ -238,10 +238,13 @@ class MedicalAgent(AgentBase):
             (call_spec[k] for k in self._TOOL_NAME_KEYS if k in call_spec),
             "",
         )
-        args = next(
-            (call_spec[k] for k in self._TOOL_ARGS_KEYS if k in call_spec),
-            {},
-        ) or {}
+        args = (
+            next(
+                (call_spec[k] for k in self._TOOL_ARGS_KEYS if k in call_spec),
+                {},
+            )
+            or {}
+        )
         if name not in self.tools.names():
             return ToolCall(
                 step=step,
