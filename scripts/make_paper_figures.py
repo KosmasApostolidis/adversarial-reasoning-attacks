@@ -10,18 +10,15 @@ Outputs (all in paper/figures/paper/):
 
 from __future__ import annotations
 
-import json
-from collections import Counter, defaultdict
+from collections import defaultdict
 from pathlib import Path
-from typing import Any
 
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
 import numpy as np
-from matplotlib.patches import FancyBboxPatch, Rectangle
-
 from _plotlib import despine, load_records, tool_palette
+from matplotlib.patches import FancyBboxPatch
 
 # ── Style ──────────────────────────────────────────────────────────────────
 mpl.rcParams.update(
@@ -42,11 +39,11 @@ mpl.rcParams.update(
     }
 )
 
-C_BENIGN  = "#2166ac"   # blue
-C_NOISE   = "#92c5de"   # light blue
-C_PGD     = "#d6604d"   # red
-C_LLAVA   = "#f4a582"   # orange
-C_ACCENT  = "#1a9850"   # green
+C_BENIGN = "#2166ac"  # blue
+C_NOISE = "#92c5de"  # light blue
+C_PGD = "#d6604d"  # red
+C_LLAVA = "#f4a582"  # orange
+C_ACCENT = "#1a9850"  # green
 PALETTE20 = plt.get_cmap("tab20").colors
 
 OUT = Path("paper/figures/paper")
@@ -55,9 +52,13 @@ OUT.mkdir(parents=True, exist_ok=True)
 
 def _panel_label(ax: plt.Axes, letter: str) -> None:
     ax.text(
-        -0.12, 1.08, letter,
+        -0.12,
+        1.08,
+        letter,
         transform=ax.transAxes,
-        fontsize=14, fontweight="bold", va="top",
+        fontsize=14,
+        fontweight="bold",
+        va="top",
     )
 
 
@@ -65,12 +66,17 @@ def _panel_label(ax: plt.Axes, letter: str) -> None:
 # Figure 1 — Main result
 # ═══════════════════════════════════════════════════════════════════════════
 
+
 def fig1_main_result() -> None:
     noise_recs = load_records("runs/main/noise/records.jsonl")
-    pgd_recs   = load_records("runs/main/pgd/records.jsonl")
-    sweep_recs = load_records("runs/main/noise/records.jsonl")
+    pgd_recs = load_records("runs/main/pgd/records.jsonl")
+    sweep_recs = [
+        r
+        for r in load_records("runs/main/noise/records.jsonl")
+        if "qwen" in r.get("model_id", "").lower()
+    ]
 
-    nd  = np.array([r["edit_distance_norm"] for r in noise_recs])
+    nd = np.array([r["edit_distance_norm"] for r in noise_recs])
     pd_ = np.array([r["edit_distance_norm"] for r in pgd_recs])
     eps = pgd_recs[0]["epsilon"]
 
@@ -80,7 +86,7 @@ def fig1_main_result() -> None:
         per_eps[r["epsilon"]].append(r["edit_distance_norm"])
     eps_sorted = sorted(per_eps)
     means = [np.mean(per_eps[e]) for e in eps_sorted]
-    stds  = [np.std(per_eps[e], ddof=1) if len(per_eps[e]) > 1 else 0 for e in eps_sorted]
+    stds = [np.std(per_eps[e], ddof=1) if len(per_eps[e]) > 1 else 0 for e in eps_sorted]
 
     fig, axes = plt.subplots(1, 3, figsize=(13, 4.2))
     fig.subplots_adjust(wspace=0.38)
@@ -105,11 +111,14 @@ def fig1_main_result() -> None:
     for i, arr in enumerate([nd, pd_], start=1):
         ax.scatter(
             np.full(len(arr), i) + np.random.default_rng(42).uniform(-0.1, 0.1, len(arr)),
-            arr, s=40, zorder=5,
-            color=[C_NOISE, C_PGD][i - 1], edgecolors="white", linewidths=0.6,
+            arr,
+            s=40,
+            zorder=5,
+            color=[C_NOISE, C_PGD][i - 1],
+            edgecolors="white",
+            linewidths=0.6,
         )
-        ax.text(i, arr.max() + 0.06, f"μ={arr.mean():.3f}",
-                ha="center", fontsize=9, color="black")
+        ax.text(i, arr.max() + 0.06, f"μ={arr.mean():.3f}", ha="center", fontsize=9, color="black")
 
     ax.set_ylabel("Normalised edit distance")
     ax.set_title(f"Attack effectiveness at ε = {eps:.4f}", pad=8)
@@ -124,8 +133,8 @@ def fig1_main_result() -> None:
     x = np.arange(n)
     w = 0.35
     pids = [r["sample_id"].split("_p")[1].replace("_s", " s") for r in pgd_recs]
-    ax.bar(x - w/2, nd, w, color=C_NOISE, label="Noise", edgecolor="white", linewidth=0.5)
-    ax.bar(x + w/2, pd_, w, color=C_PGD,   label="PGD",   edgecolor="white", linewidth=0.5)
+    ax.bar(x - w / 2, nd, w, color=C_NOISE, label="Noise", edgecolor="white", linewidth=0.5)
+    ax.bar(x + w / 2, pd_, w, color=C_PGD, label="PGD", edgecolor="white", linewidth=0.5)
     ax.set_xticks(x)
     ax.set_xticklabels(pids, fontsize=8)
     ax.set_xlabel("Patient ID")
@@ -139,9 +148,15 @@ def fig1_main_result() -> None:
     # Panel C — ε-sweep
     ax = axes[2]
     ax.errorbar(
-        [e * 255 for e in eps_sorted], means, yerr=stds,
-        marker="o", linewidth=2, markersize=7, capsize=4,
-        color=C_NOISE, label="Uniform noise (Qwen)",
+        [e * 255 for e in eps_sorted],
+        means,
+        yerr=stds,
+        marker="o",
+        linewidth=2,
+        markersize=7,
+        capsize=4,
+        color=C_NOISE,
+        label="Uniform noise (Qwen)",
     )
     ax.axhline(0, color="gray", linestyle=":", linewidth=1)
     ax.set_xlabel("ε (pixel units, ×255)")
@@ -155,7 +170,9 @@ def fig1_main_result() -> None:
 
     fig.suptitle(
         "Adversarial perturbations alter VLM agent tool-call trajectories on prostate MRI",
-        fontsize=13, fontweight="bold", y=1.02,
+        fontsize=13,
+        fontweight="bold",
+        y=1.02,
     )
     fig.savefig(OUT / "fig1_main_result.png")
     plt.close(fig)
@@ -166,13 +183,14 @@ def fig1_main_result() -> None:
 # Figure 2 — Trajectory Gantt
 # ═══════════════════════════════════════════════════════════════════════════
 
+
 def _tool_palette(all_tools: list[str]) -> dict[str, tuple]:
     return tool_palette(all_tools, sort=True)
 
 
 def fig2_trajectories() -> None:
     noise_recs = load_records("runs/main/noise/records.jsonl")
-    pgd_recs   = load_records("runs/main/pgd/records.jsonl")
+    pgd_recs = load_records("runs/main/pgd/records.jsonl")
 
     # Pick 3 most interesting samples (highest PGD edit distance)
     by_ed = sorted(pgd_recs, key=lambda r: r["edit_distance_norm"], reverse=True)[:3]
@@ -197,9 +215,9 @@ def fig2_trajectories() -> None:
     ROW_LABELS = ["Benign", "Noise", "PGD"]
     ROW_COLORS = ["#1a9850", C_NOISE, C_PGD]
 
-    for ax, rec in zip(axes, by_ed):
+    for ax, rec in zip(axes, by_ed, strict=False):
         sid = rec["sample_id"]
-        nr  = noise_map.get(sid)
+        nr = noise_map.get(sid)
         seqs = [
             rec["benign"]["tool_sequence"],
             nr["attacked"]["tool_sequence"] if nr else [],
@@ -207,27 +225,42 @@ def fig2_trajectories() -> None:
         ]
         max_len = max(len(s) for s in seqs)
 
-        for row_i, (label, seq, rc) in enumerate(zip(ROW_LABELS, seqs, ROW_COLORS)):
+        for row_i, (label, seq, rc) in enumerate(zip(ROW_LABELS, seqs, ROW_COLORS, strict=False)):
             for col, tool in enumerate(seq):
                 color = pal[tool]
                 ax.add_patch(
                     FancyBboxPatch(
                         (col + 0.04, row_i - 0.38),
-                        0.84, 0.76,
+                        0.84,
+                        0.76,
                         boxstyle="round,pad=0.02",
-                        facecolor=color, edgecolor="white", linewidth=1.2,
+                        facecolor=color,
+                        edgecolor="white",
+                        linewidth=1.2,
                         zorder=2,
                     )
                 )
                 short = tool.replace("_", "\n")
                 ax.text(
-                    col + 0.46, row_i, short,
-                    ha="center", va="center", fontsize=6.5,
-                    color="white", fontweight="bold", zorder=3,
+                    col + 0.46,
+                    row_i,
+                    short,
+                    ha="center",
+                    va="center",
+                    fontsize=6.5,
+                    color="white",
+                    fontweight="bold",
+                    zorder=3,
                 )
             ax.text(
-                -0.4, row_i, label,
-                ha="right", va="center", fontsize=9, color=rc, fontweight="bold",
+                -0.4,
+                row_i,
+                label,
+                ha="right",
+                va="center",
+                fontsize=9,
+                color=rc,
+                fontweight="bold",
             )
 
         ax.set_xlim(-0.6, max_len + 0.2)
@@ -237,28 +270,34 @@ def fig2_trajectories() -> None:
         ax.set_xticklabels([f"step {i+1}" for i in range(max_len)], fontsize=8)
         pid = sid.split("_p")[1] if "_p" in sid else sid
         pgd_ed = rec["edit_distance_norm"]
-        n_ed   = nr["edit_distance_norm"] if nr else float("nan")
+        n_ed = nr["edit_distance_norm"] if nr else float("nan")
         ax.set_title(
             f"Patient {pid}   |   edit dist: noise={n_ed:.3f}  PGD={pgd_ed:.3f}",
-            fontsize=10, loc="left", pad=5,
+            fontsize=10,
+            loc="left",
+            pad=5,
         )
         ax.spines[:].set_visible(False)
         ax.axhline(-0.5, color="#dddddd", linewidth=0.8)
 
     # Shared legend
     handles = [
-        mpl.patches.Patch(facecolor=pal[t], label=t.replace("_", " "))
-        for t in sorted(all_tools)
+        mpl.patches.Patch(facecolor=pal[t], label=t.replace("_", " ")) for t in sorted(all_tools)
     ]
     fig.legend(
-        handles=handles, loc="lower center", ncol=min(len(all_tools), 4),
-        fontsize=8, frameon=False,
+        handles=handles,
+        loc="lower center",
+        ncol=min(len(all_tools), 4),
+        fontsize=8,
+        frameon=False,
         bbox_to_anchor=(0.5, -0.02),
-        title="Tools", title_fontsize=9,
+        title="Tools",
+        title_fontsize=9,
     )
     fig.suptitle(
         "Tool-call trajectory comparison: benign vs noise vs PGD (top-3 drifted patients)",
-        fontsize=12, fontweight="bold",
+        fontsize=12,
+        fontweight="bold",
     )
     fig.savefig(OUT / "fig2_trajectories.png")
     plt.close(fig)
@@ -268,6 +307,7 @@ def fig2_trajectories() -> None:
 # ═══════════════════════════════════════════════════════════════════════════
 # Figure 3 — Tool substitution heatmap under PGD
 # ═══════════════════════════════════════════════════════════════════════════
+
 
 def fig3_tool_heatmap() -> None:
     pgd_recs = load_records("runs/main/pgd/records.jsonl")
@@ -279,12 +319,12 @@ def fig3_tool_heatmap() -> None:
         all_tools.update(r["benign"]["tool_sequence"])
         all_tools.update(r["attacked"]["tool_sequence"])
     tools = sorted(all_tools)
-    idx   = {t: i for i, t in enumerate(tools)}
-    n     = len(tools)
+    idx = {t: i for i, t in enumerate(tools)}
+    n = len(tools)
 
     counts = np.zeros((n, n), dtype=int)
-    insert = np.zeros(n, dtype=int)   # in attacked but not in benign position
-    delete = np.zeros(n, dtype=int)   # in benign but not in attacked
+    insert = np.zeros(n, dtype=int)  # in attacked but not in benign position
+    delete = np.zeros(n, dtype=int)  # in benign but not in attacked
 
     for r in pgd_recs:
         b = r["benign"]["tool_sequence"]
@@ -317,8 +357,15 @@ def fig3_tool_heatmap() -> None:
         for j in range(n):
             v = counts[i, j]
             if v > 0:
-                ax.text(j, i, str(v), ha="center", va="center", fontsize=9,
-                        color="white" if v > vmax * 0.5 else "black")
+                ax.text(
+                    j,
+                    i,
+                    str(v),
+                    ha="center",
+                    va="center",
+                    fontsize=9,
+                    color="white" if v > vmax * 0.5 else "black",
+                )
     cb = fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
     cb.set_label("substitution count", fontsize=9)
 
@@ -326,7 +373,7 @@ def fig3_tool_heatmap() -> None:
     ax2 = axes[1]
     y = np.arange(n)
     ax2.barh(y - 0.2, delete, 0.38, color=C_BENIGN, label="deleted (benign→∅)", alpha=0.8)
-    ax2.barh(y + 0.2, insert, 0.38, color=C_PGD,    label="inserted (∅→attacked)", alpha=0.8)
+    ax2.barh(y + 0.2, insert, 0.38, color=C_PGD, label="inserted (∅→attacked)", alpha=0.8)
     ax2.set_yticks(y)
     ax2.set_yticklabels([t.replace("_", "\n") for t in tools], fontsize=7.5)
     ax2.set_xlabel("Count")
@@ -337,7 +384,9 @@ def fig3_tool_heatmap() -> None:
     _panel_label(axes[0], "A")
     _panel_label(axes[1], "B")
 
-    fig.suptitle("PGD-induced tool-call perturbation anatomy (n=5 patients)", fontsize=12, fontweight="bold")
+    fig.suptitle(
+        "PGD-induced tool-call perturbation anatomy (n=5 patients)", fontsize=12, fontweight="bold"
+    )
     fig.savefig(OUT / "fig3_tool_heatmap.png")
     plt.close(fig)
     print("fig3 ✓")
@@ -347,9 +396,11 @@ def fig3_tool_heatmap() -> None:
 # Figure 4 — Cross-model (Qwen vs LLaVA) under uniform noise
 # ═══════════════════════════════════════════════════════════════════════════
 
+
 def fig4_cross_model() -> None:
-    qwen_recs  = load_records("runs/main/noise/records.jsonl")
-    llava_recs = load_records("runs/main/noise/records.jsonl")
+    all_noise = load_records("runs/main/noise/records.jsonl")
+    qwen_recs = [r for r in all_noise if "qwen" in r.get("model_id", "").lower()]
+    llava_recs = [r for r in all_noise if "llava" in r.get("model_id", "").lower()]
 
     qd = np.array([r["edit_distance_norm"] for r in qwen_recs])
     ld = np.array([r["edit_distance_norm"] for r in llava_recs])
@@ -361,7 +412,7 @@ def fig4_cross_model() -> None:
     # Violin + strip
     ax = axes[0]
     parts = ax.violinplot([qd, ld], positions=[1, 2], showmedians=True, showextrema=False)
-    for pc, color in zip(parts["bodies"], [C_BENIGN, C_LLAVA]):
+    for pc, color in zip(parts["bodies"], [C_BENIGN, C_LLAVA], strict=False):
         pc.set_facecolor(color)
         pc.set_alpha(0.7)
     parts["cmedians"].set_colors(["black", "black"])
@@ -369,27 +420,41 @@ def fig4_cross_model() -> None:
     rng = np.random.default_rng(0)
     for xi, arr, c in [(1, qd, C_BENIGN), (2, ld, C_LLAVA)]:
         jitter = rng.uniform(-0.06, 0.06, len(arr))
-        ax.scatter(np.full(len(arr), xi) + jitter, arr,
-                   s=50, zorder=5, color=c, edgecolors="white", linewidths=0.8)
+        ax.scatter(
+            np.full(len(arr), xi) + jitter,
+            arr,
+            s=50,
+            zorder=5,
+            color=c,
+            edgecolors="white",
+            linewidths=0.8,
+        )
     ax.set_xticks([1, 2])
     ax.set_xticklabels(["Qwen2.5-VL-7B", "LLaVA-v1.6-Mistral-7B"])
     ax.set_ylabel("Normalised edit distance")
     ax.set_title(f"Cross-model sensitivity at ε={eps:.4f}", pad=8)
     for xi, arr, c in [(1, qd, C_BENIGN), (2, ld, C_LLAVA)]:
-        ax.text(xi, arr.max() + 0.07, f"μ={arr.mean():.3f}",
-                ha="center", fontsize=9, color=c, fontweight="bold")
+        ax.text(
+            xi,
+            arr.max() + 0.07,
+            f"μ={arr.mean():.3f}",
+            ha="center",
+            fontsize=9,
+            color=c,
+            fontweight="bold",
+        )
     ax.set_ylim(bottom=0)
     despine(ax)
     _panel_label(ax, "A")
 
     # Per-patient grouped bars
     ax2 = axes[1]
-    n  = min(len(qwen_recs), len(llava_recs))
-    x  = np.arange(n)
-    w  = 0.35
+    n = min(len(qwen_recs), len(llava_recs))
+    x = np.arange(n)
+    w = 0.35
     pids = [r["sample_id"].split("_p")[1].replace("_s", "·") for r in qwen_recs[:n]]
-    ax2.bar(x - w/2, qd[:n], w, color=C_BENIGN, label="Qwen2.5-VL",    edgecolor="white")
-    ax2.bar(x + w/2, ld[:n], w, color=C_LLAVA,  label="LLaVA-v1.6",    edgecolor="white")
+    ax2.bar(x - w / 2, qd[:n], w, color=C_BENIGN, label="Qwen2.5-VL", edgecolor="white")
+    ax2.bar(x + w / 2, ld[:n], w, color=C_LLAVA, label="LLaVA-v1.6", edgecolor="white")
     ax2.set_xticks(x)
     ax2.set_xticklabels(pids, fontsize=8)
     ax2.set_xlabel("Patient ID")
@@ -402,7 +467,9 @@ def fig4_cross_model() -> None:
 
     fig.suptitle(
         "LLaVA is more sensitive to uniform-noise perturbations than Qwen2.5-VL",
-        fontsize=12, fontweight="bold", y=1.02,
+        fontsize=12,
+        fontweight="bold",
+        y=1.02,
     )
     fig.savefig(OUT / "fig4_cross_model.png")
     plt.close(fig)
@@ -413,14 +480,17 @@ def fig4_cross_model() -> None:
 # Figure 5 — Attack landscape: violin across attack modes & models
 # ═══════════════════════════════════════════════════════════════════════════
 
-def fig5_attack_landscape() -> None:
-    noise_q = load_records("runs/main/noise/records.jsonl")
-    pgd_q   = load_records("runs/main/pgd/records.jsonl")
-    noise_l = load_records("runs/main/noise/records.jsonl")
 
-    groups  = [
+def fig5_attack_landscape() -> None:
+    all_noise = load_records("runs/main/noise/records.jsonl")
+    all_pgd = load_records("runs/main/pgd/records.jsonl")
+    noise_q = [r for r in all_noise if "qwen" in r.get("model_id", "").lower()]
+    noise_l = [r for r in all_noise if "llava" in r.get("model_id", "").lower()]
+    pgd_q = [r for r in all_pgd if "qwen" in r.get("model_id", "").lower()]
+
+    groups = [
         ("Qwen\n(noise)", np.array([r["edit_distance_norm"] for r in noise_q]), C_NOISE),
-        ("Qwen\n(PGD)",   np.array([r["edit_distance_norm"] for r in pgd_q]),   C_PGD),
+        ("Qwen\n(PGD)", np.array([r["edit_distance_norm"] for r in pgd_q]), C_PGD),
         ("LLaVA\n(noise)", np.array([r["edit_distance_norm"] for r in noise_l]), C_LLAVA),
     ]
 
@@ -433,19 +503,33 @@ def fig5_attack_landscape() -> None:
         showextrema=False,
         widths=0.5,
     )
-    for pc, (_, _, c) in zip(parts["bodies"], groups):
+    for pc, (_, _, c) in zip(parts["bodies"], groups, strict=False):
         pc.set_facecolor(c)
         pc.set_alpha(0.8)
     parts["cmedians"].set_colors(["black"] * len(groups))
     parts["cmedians"].set_linewidth(2.5)
 
     rng = np.random.default_rng(7)
-    for xi, (label, arr, c) in zip(positions, groups):
+    for xi, (_label, arr, c) in zip(positions, groups, strict=False):
         jitter = rng.uniform(-0.07, 0.07, len(arr))
-        ax.scatter(np.full(len(arr), xi) + jitter, arr,
-                   s=55, zorder=5, color=c, edgecolors="white", linewidths=1.0)
-        ax.text(xi, arr.max() + 0.07, f"μ={arr.mean():.3f}",
-                ha="center", fontsize=9.5, fontweight="bold", color=c)
+        ax.scatter(
+            np.full(len(arr), xi) + jitter,
+            arr,
+            s=55,
+            zorder=5,
+            color=c,
+            edgecolors="white",
+            linewidths=1.0,
+        )
+        ax.text(
+            xi,
+            arr.max() + 0.07,
+            f"μ={arr.mean():.3f}",
+            ha="center",
+            fontsize=9.5,
+            fontweight="bold",
+            color=c,
+        )
 
     ax.set_xticks(positions)
     ax.set_xticklabels([g[0] for g in groups], fontsize=11)
@@ -453,13 +537,17 @@ def fig5_attack_landscape() -> None:
     ax.set_ylim(bottom=0)
     ax.set_title(
         "Attack landscape: trajectory drift by model and perturbation type",
-        fontsize=12, fontweight="bold", pad=10,
+        fontsize=12,
+        fontweight="bold",
+        pad=10,
     )
 
     # Significance bracket (PGD vs noise, same model)
-    y_bracket = max(pgd_q[0]["edit_distance_norm"] for _ in [1]) + 0.22
+    y_bracket = max(r["edit_distance_norm"] for r in pgd_q) + 0.22
     ax.annotate(
-        "", xy=(2, y_bracket), xytext=(1, y_bracket),
+        "",
+        xy=(2, y_bracket),
+        xytext=(1, y_bracket),
         arrowprops=dict(arrowstyle="-", color="black", lw=1.5),
     )
     ax.text(1.5, y_bracket + 0.03, "p < 0.05*", ha="center", fontsize=9, style="italic")
