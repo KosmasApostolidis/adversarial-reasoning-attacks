@@ -24,18 +24,27 @@ class QwenVL(VLMBase):
     ) -> None:
         # Deferred import: avoid loading transformers at package import time so
         # CI + lightweight tests don't pay the cost.
+        from pathlib import Path
+
         from transformers import AutoProcessor, Qwen2_5_VLForConditionalGeneration
 
         self.model_id = hf_id
-        self.processor = AutoProcessor.from_pretrained(hf_id, revision=revision)
+        # HF rejects `revision=` for local directories; only forward it for hub IDs.
+        from_pretrained_kwargs: dict[str, Any] = {}
+        if not Path(hf_id).is_dir():
+            from_pretrained_kwargs["revision"] = revision
+        self.processor = AutoProcessor.from_pretrained(hf_id, **from_pretrained_kwargs)
         self.model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
             hf_id,
             torch_dtype=torch_dtype,
             device_map=device_map,
-            revision=revision,
+            **from_pretrained_kwargs,
         )
         # Set inference mode (equivalent to `.eval()` but avoids ambiguity).
         self.model.train(False)
+        eos_id = self.processor.tokenizer.eos_token_id
+        if self.model.generation_config.pad_token_id is None:
+            self.model.generation_config.pad_token_id = eos_id
 
     def preprocess_image(self, image: Image.Image) -> Any:
         # Qwen2.5-VL processor expects PIL → tensor via the processor pipeline.

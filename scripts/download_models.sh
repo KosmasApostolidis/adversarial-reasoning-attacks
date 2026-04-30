@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
-# Download HF fp16 + Ollama Q4 weights for the Phase 0/1 VLMs.
-# Phase 2 model (Llama-3.2-Vision) is commented out; enable after disk prune.
+# Download HF fp16 + Ollama Q4 weights for the active benchmark VLMs.
 
 set -euo pipefail
 
@@ -20,7 +19,6 @@ mkdir -p "${HF_HOME}"
 HF_MODELS=(
   "Qwen/Qwen2.5-VL-7B-Instruct"
   "llava-hf/llava-v1.6-mistral-7b-hf"
-  "meta-llama/Llama-3.2-11B-Vision-Instruct"   # Phase 2: requires HF_TOKEN + disk prune
 )
 
 for repo in "${HF_MODELS[@]}"; do
@@ -45,7 +43,6 @@ else
   OLLAMA_MODELS=(
     "qwen2.5vl:7b-q4_K_M"
     "llava:7b-v1.6-mistral-q4_K_M"
-    # "llama3.2-vision:11b-instruct-q4_K_M"     # Phase 2
   )
   for tag in "${OLLAMA_MODELS[@]}"; do
     echo "[download_models] ollama pull ${tag}"

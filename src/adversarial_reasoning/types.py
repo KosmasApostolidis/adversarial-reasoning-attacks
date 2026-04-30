@@ -27,10 +27,11 @@ class AttackInputs(TypedDict, total=False):
 
     Optional keys (model-family-specific; threaded into forward/generate
     via ``**`` unpacking by the runner):
-        attention_mask:  prompt attention mask, shape ``(B, T_prompt)``.
-        image_grid_thw:  Qwen2.5-VL anyres grid ``(T, H, W)``.
-        image_sizes:     LLaVA-Next per-image ``(H, W)`` shape list.
-        image_token_id:  scalar id of the image placeholder token.
+        attention_mask:    prompt attention mask, shape ``(B, T_prompt)``.
+        image_grid_thw:    Qwen2.5-VL anyres grid ``(T, H, W)``.
+        image_sizes:       LLaVA-Next per-image ``(H, W)`` shape list.
+        image_token_id:    scalar id of the image placeholder token.
+        num_patches_list:  InternVL2 dynamic-tile count per image, shape ``(B,)``.
     """
 
     pixel_values: torch.Tensor
@@ -39,6 +40,7 @@ class AttackInputs(TypedDict, total=False):
     image_grid_thw: torch.Tensor
     image_sizes: torch.Tensor
     image_token_id: int
+    num_patches_list: torch.Tensor
 
 
 class GenKwargs(TypedDict, total=False):
@@ -58,6 +60,7 @@ class GenKwargs(TypedDict, total=False):
     attention_mask: torch.Tensor
     image_grid_thw: torch.Tensor
     image_sizes: torch.Tensor
+    num_patches_list: torch.Tensor
 
 
 __all__ = ["AttackInputs", "GenKwargs"]
