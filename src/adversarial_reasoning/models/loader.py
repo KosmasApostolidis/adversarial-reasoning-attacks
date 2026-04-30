@@ -32,10 +32,10 @@ def load_hf_vlm(model_name: str, config_path: str | Path = "configs/models.yaml"
             device_map=cfg.get("device_map", "auto"),
             revision=cfg.get("hf_revision", "main"),
         )
-    if family == "llama_vision":
-        from .llama_vision import LlamaVision
+    if family == "internvl2":
+        from .internvl2 import InternVL2
 
-        return LlamaVision(
+        return InternVL2(
             hf_id=cfg["hf_id"],
             device_map=cfg.get("device_map", "auto"),
             revision=cfg.get("hf_revision", "main"),
@@ -50,6 +50,12 @@ def load_ollama_vlm(
 ) -> OllamaVLMClient:
     """Load the Ollama-served twin of a VLM by config key."""
     cfg = _read_config(config_path)["models"][model_name]
+    if "ollama_tag" not in cfg:
+        raise NotImplementedError(
+            f"No Ollama image registered for model {model_name!r} "
+            f"(family={cfg.get('family')!r}). Transfer evaluation via Ollama is "
+            "not supported for this model; use the HF surrogate (load_hf_vlm)."
+        )
     return OllamaVLMClient(
         ollama_tag=cfg["ollama_tag"],
         family=cfg["family"],

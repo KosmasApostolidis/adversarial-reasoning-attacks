@@ -33,6 +33,9 @@ class LlavaNext(VLMBase):
             revision=revision,
         )
         self.model.train(False)
+        eos_id = self.processor.tokenizer.eos_token_id
+        if self.model.generation_config.pad_token_id is None:
+            self.model.generation_config.pad_token_id = eos_id
 
     def preprocess_image(self, image: Image.Image) -> Any:
         return image

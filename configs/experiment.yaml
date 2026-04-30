@@ -10,8 +10,6 @@ experiment:
   models:
     - qwen2_5_vl_7b
     - llava_v1_6_mistral_7b
-    # - llama_3_2_vision_11b      # gated: needs HF_TOKEN + Meta license accept
-    #                              re-enable once `huggingface-cli login` is run
 
   tasks:
     - prostate_mri_workup

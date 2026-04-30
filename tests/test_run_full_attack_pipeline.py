@@ -98,36 +98,36 @@ class TestModeValidation:
         assert r.returncode == 0, r.stderr
 
 
-# ---------- HF_TOKEN gating (M3) ----------
+# ---------- modes run without HF_TOKEN (llama removed from eval) ----------
 
 
-class TestHfTokenGating:
-    def test_noise_only_no_token_ok(self, sandbox: Path) -> None:
+class TestModesNoHfTokenRequired:
+    def test_noise_no_token_ok(self, sandbox: Path) -> None:
         r = _run(sandbox, "noise")
         assert r.returncode == 0
-        assert "HF_TOKEN is required" not in r.stderr
+        assert "HF_TOKEN" not in r.stderr
 
-    def test_pgd_without_token_fails(self, sandbox: Path) -> None:
+    def test_pgd_no_token_ok(self, sandbox: Path) -> None:
         r = _run(sandbox, "pgd")
-        assert r.returncode != 0
-        assert "HF_TOKEN" in r.stderr
+        assert r.returncode == 0
+        assert "HF_TOKEN" not in r.stderr
 
-    def test_apgd_without_token_fails(self, sandbox: Path) -> None:
+    def test_apgd_no_token_ok(self, sandbox: Path) -> None:
         r = _run(sandbox, "apgd")
-        assert r.returncode != 0
+        assert r.returncode == 0
 
-    def test_targeted_tool_without_token_fails(self, sandbox: Path) -> None:
+    def test_targeted_tool_no_token_ok(self, sandbox: Path) -> None:
         r = _run(sandbox, "targeted_tool")
-        assert r.returncode != 0
+        assert r.returncode == 0
 
-    def test_trajectory_drift_without_token_fails(self, sandbox: Path) -> None:
+    def test_trajectory_drift_no_token_ok(self, sandbox: Path) -> None:
         r = _run(sandbox, "trajectory_drift")
-        assert r.returncode != 0
+        assert r.returncode == 0
 
-    def test_mixed_subset_requires_token(self, sandbox: Path) -> None:
+    def test_mixed_subset_no_token_ok(self, sandbox: Path) -> None:
         r = _run(sandbox, "noise", "pgd")
-        assert r.returncode != 0
-        assert "HF_TOKEN" in r.stderr
+        assert r.returncode == 0
+        assert "HF_TOKEN" not in r.stderr
 
 
 # ---------- preflight: missing cv_folds ----------
