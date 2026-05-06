@@ -1,0 +1,31 @@
+# Phase 0f defended: adv-FT'd InternVL2-8B under PGD-L∞ at the canonical
+# T3 eval budget (4/255, 8/255). Pairs 1:1 with baseline_internvl2.yaml on
+# seed/task/attack/eps; only the model_key differs.
+#
+# The checkpoint path is owned by configs/models.yaml under model_key
+# `defended_internvl2_8b` (hf_dir produced by
+# adversarial-reasoning-training/scripts/ckpt_to_hf_dir.py from the
+# Phase 0c best.pt). Re-export the hf_dir whenever Phase 0c reruns.
+#
+# Output records.jsonl is consumed by:
+#   art-eval-robust --defended-records <records.jsonl>
+
+experiment:
+  name: phase0f_defended_internvl2
+  phase: "0"
+  seeds: [0]
+  output_dir: ../adversarial-reasoning-training/runs/internvl2_main_seed0
+
+  models:
+    - defended_internvl2_8b
+
+  tasks:
+    - prostate_mri_workup
+    - rad_vqa_action
+    - prostate_mri_targeted
+
+  attacks:
+    - pgd_linf
+
+  # Canonical T3 eval suite (configs/defenses.yaml :: pgd.eval_eps).
+  epsilons_linf: [0.0157, 0.0314]
