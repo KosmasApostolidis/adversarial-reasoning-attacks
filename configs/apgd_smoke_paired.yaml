@@ -1,0 +1,36 @@
+# APGD smoke, paired stock-vs-defended Qwen. Single runner invocation produces
+# both arms (model_key=qwen2_5_vl_7b and model_key=defended_qwen2_5_vl_7b) in
+# the same records.jsonl, ready for paired-delta analysis. Mirrors apgd_smoke.yaml
+# at smoke scale (5 samples, ε=8/255, 40 APGD steps).
+experiment:
+  name: apgd_smoke_paired
+  phase: "1"
+  seeds: [0]
+  output_dir: runs/apgd_smoke_paired
+
+  models:
+    - qwen2_5_vl_7b
+    - defended_qwen2_5_vl_7b
+
+  tasks:
+    - prostate_mri_workup
+
+  task_overrides:
+    prostate_mri_workup:
+      dataset_split:
+        val: 5
+
+  attacks:
+    - apgd_linf
+
+  attack_overrides:
+    apgd_linf:
+      epsilons: [0.0314]
+      steps: [40]
+      random_restarts: [1]
+
+  statistics:
+    test: wilcoxon_signed_rank
+    bootstrap_resamples: 1000
+    ci_level: 0.95
+    multiple_comparison_correction: none
