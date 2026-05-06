@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "adversarial-reasoning"
-version = "0.1.0"
+version = "0.2.0"
 description = "White-box image-space adversarial attacks on medical imaging VLM agents"
 readme = "README.md"
 requires-python = ">=3.10"
