@@ -1,6 +1,5 @@
 """Smoke tests for shared figure-script plotlib helpers."""
 
-# ruff: noqa: I001 — matplotlib.use("Agg") must run before importing pyplot.
 from __future__ import annotations
 
 import json
@@ -44,9 +43,9 @@ def test_load_records_skips_missing_with_warning(
     with caplog.at_level("WARNING", logger="_plotlib"):
         out = load_records(missing, tmp_records)
     assert len(out) == 2, "missing file must still be skipped, not crash"
-    assert any(
-        "missing file" in r.message and "nope.jsonl" in r.message for r in caplog.records
-    ), "skipping a missing file must emit a WARNING log line"
+    assert any("missing file" in r.message and "nope.jsonl" in r.message for r in caplog.records), (
+        "skipping a missing file must emit a WARNING log line"
+    )
 
 
 def test_load_records_strict_raises_when_empty(tmp_path: Path) -> None:

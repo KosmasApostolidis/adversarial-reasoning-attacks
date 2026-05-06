@@ -30,6 +30,7 @@ class _ToolCall:
 @dataclass
 class _Trajectory:
     """Minimal stand-in for ``adversarial_reasoning.agents.base.Trajectory``."""
+
     tool_calls: list[_ToolCall]
 
 
@@ -62,10 +63,12 @@ class _StubVLM:
 @pytest.mark.smoke
 def test_target_from_benign_uses_first_tool_call():
     vlm = _StubVLM()
-    benign = _Trajectory(tool_calls=[
-        _ToolCall("query_guidelines", {"topic": "pca"}),
-        _ToolCall("calculate_risk_score", {"psa": 6.5}),
-    ])
+    benign = _Trajectory(
+        tool_calls=[
+            _ToolCall("query_guidelines", {"topic": "pca"}),
+            _ToolCall("calculate_risk_score", {"psa": 6.5}),
+        ]
+    )
     prompt_ids = torch.zeros(1, 1, dtype=torch.long)
     out = target_from_benign(vlm, benign, prompt_ids)
     assert out.dim() == 2
@@ -89,11 +92,13 @@ def test_target_from_benign_falls_back_when_empty():
 def test_target_from_trajectory_concatenates_all_tool_calls():
     vlm = _StubVLM()
     single = _Trajectory(tool_calls=[_ToolCall("a", {})])
-    full = _Trajectory(tool_calls=[
-        _ToolCall("a", {}),
-        _ToolCall("b", {}),
-        _ToolCall("c", {}),
-    ])
+    full = _Trajectory(
+        tool_calls=[
+            _ToolCall("a", {}),
+            _ToolCall("b", {}),
+            _ToolCall("c", {}),
+        ]
+    )
     prompt_ids = torch.zeros(1, 1, dtype=torch.long)
     short = target_from_trajectory(vlm, single, prompt_ids).shape[-1]
     long_ = target_from_trajectory(vlm, full, prompt_ids).shape[-1]
@@ -114,7 +119,9 @@ def test_target_from_trajectory_falls_back_to_benign_when_empty():
 def test_target_from_tool_includes_target_name_in_output():
     vlm = _StubVLM()
     out = target_from_tool(
-        vlm, target_tool="escalate_to_specialist", target_args={"urgency": "high"},
+        vlm,
+        target_tool="escalate_to_specialist",
+        target_args={"urgency": "high"},
     )
     # Stub tokenizer maps each char to its ord(); reconstruct text.
     text = "".join(chr(int(c)) for c in out[0].tolist())

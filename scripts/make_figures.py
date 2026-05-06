@@ -27,10 +27,8 @@ from typing import Any
 
 import matplotlib.pyplot as plt
 import numpy as np
-from matplotlib.patches import Rectangle
-from PIL import Image
-
 from _plotlib import load_records, tool_palette
+from matplotlib.patches import Rectangle
 
 
 def _load_gate(path: Path) -> dict[str, Any] | None:
@@ -45,15 +43,13 @@ def _unique_tools(records: list[dict]) -> list[str]:
     return sorted(names)
 
 
-def fig_sequence_comparison(
-    record: dict, palette: dict[str, Any], out_path: Path
-) -> None:
+def fig_sequence_comparison(record: dict, palette: dict[str, Any], out_path: Path) -> None:
     benign = record["benign"]["tool_sequence"]
     attacked = record["attacked"]["tool_sequence"]
     max_len = max(len(benign), len(attacked), 1)
 
     fig, ax = plt.subplots(figsize=(max(10, 0.7 * max_len), 3.2))
-    for row, (label, seq) in enumerate([("attacked", attacked), ("benign", benign)]):
+    for row, (_label, seq) in enumerate([("attacked", attacked), ("benign", benign)]):
         for step, name in enumerate(seq):
             ax.add_patch(
                 Rectangle(
@@ -97,19 +93,24 @@ def fig_edit_distance_distribution(
     records: list[dict], noise_threshold: float, out_path: Path
 ) -> None:
     dists = np.array([r["edit_distance_norm"] for r in records])
-    fig, (ax_h, ax_b) = plt.subplots(
-        1, 2, figsize=(10, 4), gridspec_kw={"width_ratios": [3, 1]}
-    )
+    fig, (ax_h, ax_b) = plt.subplots(1, 2, figsize=(10, 4), gridspec_kw={"width_ratios": [3, 1]})
     bins = np.linspace(0, max(0.5, dists.max() * 1.1), 16)
     ax_h.hist(dists, bins=bins, color="#4a7ab8", edgecolor="black", linewidth=0.6)
-    ax_h.axvline(noise_threshold, color="red", linestyle="--", linewidth=1.2,
-                 label=f"noise floor threshold={noise_threshold:.3f}")
-    ax_h.axvline(dists.mean(), color="black", linestyle="-", linewidth=1.0,
-                 label=f"mean={dists.mean():.3f}")
+    ax_h.axvline(
+        noise_threshold,
+        color="red",
+        linestyle="--",
+        linewidth=1.2,
+        label=f"noise floor threshold={noise_threshold:.3f}",
+    )
+    ax_h.axvline(
+        dists.mean(), color="black", linestyle="-", linewidth=1.0, label=f"mean={dists.mean():.3f}"
+    )
     ax_h.set_xlabel("normalized trajectory edit distance", fontsize=11)
     ax_h.set_ylabel("sample count", fontsize=11)
-    ax_h.set_title(f"{records[0]['model_key']} · attack effect distribution (n={len(dists)})",
-                   fontsize=11)
+    ax_h.set_title(
+        f"{records[0]['model_key']} · attack effect distribution (n={len(dists)})", fontsize=11
+    )
     ax_h.legend(fontsize=9)
     ax_h.grid(axis="y", linestyle=":", alpha=0.4)
 
@@ -137,15 +138,30 @@ def fig_tool_frequency(records: list[dict], palette: dict[str, Any], out_path: P
     x = np.arange(len(tools))
     w = 0.4
     fig, ax = plt.subplots(figsize=(max(8, 1.2 * len(tools)), 4.5))
-    ax.bar(x - w / 2, [benign_counts[t] for t in tools], w, label="benign",
-           color="#2e7d32", edgecolor="black", linewidth=0.6)
-    ax.bar(x + w / 2, [attacked_counts[t] for t in tools], w, label="attacked",
-           color="#c62828", edgecolor="black", linewidth=0.6)
+    ax.bar(
+        x - w / 2,
+        [benign_counts[t] for t in tools],
+        w,
+        label="benign",
+        color="#2e7d32",
+        edgecolor="black",
+        linewidth=0.6,
+    )
+    ax.bar(
+        x + w / 2,
+        [attacked_counts[t] for t in tools],
+        w,
+        label="attacked",
+        color="#c62828",
+        edgecolor="black",
+        linewidth=0.6,
+    )
     ax.set_xticks(x)
     ax.set_xticklabels([t.replace("_", "\n") for t in tools], fontsize=9)
     ax.set_ylabel("tool-call count across samples", fontsize=11)
-    ax.set_title(f"{records[0]['model_key']} · tool invocation frequency (n={len(records)})",
-                 fontsize=11)
+    ax.set_title(
+        f"{records[0]['model_key']} · tool invocation frequency (n={len(records)})", fontsize=11
+    )
     ax.legend(fontsize=10)
     ax.grid(axis="y", linestyle=":", alpha=0.4)
     plt.tight_layout()
@@ -163,8 +179,16 @@ def fig_eps_sweep(records: list[dict], out_path: Path) -> None:
     means = [np.mean(per_eps[e]) for e in eps_sorted]
     stds = [np.std(per_eps[e], ddof=1) if len(per_eps[e]) > 1 else 0 for e in eps_sorted]
     fig, ax = plt.subplots(figsize=(7, 4.5))
-    ax.errorbar(eps_sorted, means, yerr=stds, marker="o", linewidth=1.5,
-                capsize=4, color="#4a7ab8", label="mean ± 1σ")
+    ax.errorbar(
+        eps_sorted,
+        means,
+        yerr=stds,
+        marker="o",
+        linewidth=1.5,
+        capsize=4,
+        color="#4a7ab8",
+        label="mean ± 1σ",
+    )
     ax.set_xlabel("ε (L∞ radius)", fontsize=11)
     ax.set_ylabel("mean normalized edit distance", fontsize=11)
     ax.set_title(f"{records[0]['model_key']} · dose–response", fontsize=11)
@@ -175,9 +199,7 @@ def fig_eps_sweep(records: list[dict], out_path: Path) -> None:
     plt.close(fig)
 
 
-def fig_attack_panel(
-    records: list[dict], task_id: str, out_path: Path, split: str = "val"
-) -> None:
+def fig_attack_panel(records: list[dict], task_id: str, out_path: Path, split: str = "val") -> None:
     """Render clean | δ | adversarial triptych for first sample."""
     from adversarial_reasoning.runner import perturb_noise
     from adversarial_reasoning.tasks.loader import load_task
@@ -199,16 +221,12 @@ def fig_attack_panel(
     axes[0].imshow(clean_arr.astype(np.uint8))
     axes[0].set_title("clean", fontsize=11)
     axes[1].imshow(delta_vis)
-    axes[1].set_title(
-        f"δ (normalized, ε={rec['epsilon']:.4f}, seed={rec['seed']})", fontsize=11
-    )
+    axes[1].set_title(f"δ (normalized, ε={rec['epsilon']:.4f}, seed={rec['seed']})", fontsize=11)
     axes[2].imshow(adv_arr.astype(np.uint8))
     axes[2].set_title("adversarial", fontsize=11)
     for ax in axes:
         ax.axis("off")
-    fig.suptitle(
-        f"{rec['model_key']} · {rec['sample_id']}", fontsize=12, y=0.98
-    )
+    fig.suptitle(f"{rec['model_key']} · {rec['sample_id']}", fontsize=12, y=0.98)
     plt.tight_layout()
     fig.savefig(out_path, dpi=140)
     plt.close(fig)
@@ -235,14 +253,17 @@ def main() -> int:
     palette = tool_palette(_unique_tools(records))
     model_key = records[0]["model_key"]
 
-    fig_edit_distance_distribution(records, noise_thr, out_dir / f"edit_distance_distribution_{model_key}.png")
+    fig_edit_distance_distribution(
+        records, noise_thr, out_dir / f"edit_distance_distribution_{model_key}.png"
+    )
     fig_tool_frequency(records, palette, out_dir / f"tool_frequency_{model_key}.png")
     fig_eps_sweep(records, out_dir / f"eps_sweep_{model_key}.png")
     fig_attack_panel(records, args.task, out_dir / f"example_attack_panel_{model_key}.png")
 
     for r in records:
         fig_sequence_comparison(
-            r, palette,
+            r,
+            palette,
             out_dir / f"tool_sequence_{model_key}_{r['sample_id']}.png",
         )
     print(f"[make_figures] wrote figures → {out_dir}")

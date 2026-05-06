@@ -143,7 +143,7 @@ def test_chat_honors_max_retries_setting(monkeypatch: pytest.MonkeyPatch) -> Non
     client = OllamaVLMClient(ollama_tag="m:tag", family="qwen_vl", settings=settings)
     img = Image.new("RGB", (4, 4))
     # Avoid 1+s exponential waits during test
-    monkeypatch.setattr(oc_mod, "wait_exponential", lambda **_: (lambda *a, **k: 0))
+    monkeypatch.setattr(oc_mod, "wait_exponential", lambda **_: lambda *a, **k: 0)
     with pytest.raises(ConnectionError):
         client.generate(img, prompt="hi")
     assert fake_client.chat.call_count == 5
@@ -158,7 +158,7 @@ def test_chat_succeeds_within_retry_budget(monkeypatch: pytest.MonkeyPatch) -> N
     ]
     settings = OllamaSettings(max_retries=5)
     client = OllamaVLMClient(ollama_tag="m:tag", family="qwen_vl", settings=settings)
-    monkeypatch.setattr(oc_mod, "wait_exponential", lambda **_: (lambda *a, **k: 0))
+    monkeypatch.setattr(oc_mod, "wait_exponential", lambda **_: lambda *a, **k: 0)
     img = Image.new("RGB", (4, 4))
     out = client.generate(img, prompt="hi")
     assert out.text == "ok"

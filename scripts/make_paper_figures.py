@@ -267,7 +267,7 @@ def fig2_trajectories() -> None:
         ax.set_ylim(-0.7, len(seqs) - 0.3)
         ax.set_yticks([])
         ax.set_xticks(range(max_len))
-        ax.set_xticklabels([f"step {i+1}" for i in range(max_len)], fontsize=8)
+        ax.set_xticklabels([f"step {i + 1}" for i in range(max_len)], fontsize=8)
         pid = sid.split("_p")[1] if "_p" in sid else sid
         pgd_ed = rec["edit_distance_norm"]
         n_ed = nr["edit_distance_norm"] if nr else float("nan")

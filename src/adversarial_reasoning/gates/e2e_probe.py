@@ -118,12 +118,10 @@ def run_e2e_probe(
         # PIL. Pixel-space re-load exercises the HF→deployment preprocessing
         # path without requiring Ollama for this gate.
         perturbed_pil = _tensor_to_pil(ar.perturbed_image)
-        attacked = agent.run(
-            task_id=task_id, image=perturbed_pil, prompt=prompt, seed=0
-        )
+        attacked = agent.run(task_id=task_id, image=perturbed_pil, prompt=prompt, seed=0)
         result.attacked_tool_sequence = attacked.tool_sequence()
         result.passed = result.pgd_linf <= epsilon + 1e-5
-    except Exception as exc:  # noqa: BLE001 — probe reports, doesn't raise
+    except Exception as exc:
         result.exception = f"{type(exc).__name__}: {exc}"
         result.passed = False
 

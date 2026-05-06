@@ -33,7 +33,7 @@ class LlavaNext(VLMBase):
             revision=revision,
         )
         self.model.train(False)
-        eos_id = self.processor.tokenizer.eos_token_id
+        eos_id = self.processor.tokenizer.eos_token_id  # type: ignore[attr-defined]
         if self.model.generation_config.pad_token_id is None:
             self.model.generation_config.pad_token_id = eos_id
 
@@ -119,7 +119,7 @@ class LlavaNext(VLMBase):
             return_dict=True,
             **forward_kwargs,
         )
-        return outputs.logits
+        return cast(torch.Tensor, outputs.logits)
 
     def generate_from_pixel_values(  # type: ignore[override]
         self,

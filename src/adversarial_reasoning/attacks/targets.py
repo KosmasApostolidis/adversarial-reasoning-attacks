@@ -25,20 +25,14 @@ if TYPE_CHECKING:
 
 def _tokenize(vlm: Any, text: str, device: Any | None = None) -> torch.Tensor:
     """Run the VLM's own tokenizer over ``text`` (no special tokens)."""
-    enc = vlm.processor.tokenizer(
-        text, return_tensors="pt", add_special_tokens=False
-    )
+    enc = vlm.processor.tokenizer(text, return_tensors="pt", add_special_tokens=False)
     ids: torch.Tensor = enc["input_ids"]
     return ids.to(device) if device is not None else ids
 
 
 def _tool_call_block(name: str, args: dict | None) -> str:
     """Qwen-style tool-call wrapper around a single ``{"name", "arguments"}`` JSON."""
-    return (
-        "<tool_call>\n"
-        f'{{"name": "{name}", "arguments": {json.dumps(args or {})}}}'
-        "\n</tool_call>"
-    )
+    return f'<tool_call>\n{{"name": "{name}", "arguments": {json.dumps(args or {})}}}\n</tool_call>'
 
 
 def target_from_benign(

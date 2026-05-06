@@ -13,28 +13,28 @@ Subcommands
     hero | comprehensive | paper | attack-landscape | reasoning-flow
     graph | compare | figures
 """
+
 from __future__ import annotations
 
 import runpy
 import sys
 
 SUBCOMMANDS: dict[str, str] = {
-    "hero":             "scripts.make_hero_figures",
-    "comprehensive":    "scripts.make_comprehensive_figures",
-    "paper":            "scripts.make_paper_figures",
+    "hero": "scripts.make_hero_figures",
+    "comprehensive": "scripts.make_comprehensive_figures",
+    "paper": "scripts.make_paper_figures",
     "attack-landscape": "scripts.make_attack_landscape",
-    "reasoning-flow":   "scripts.make_reasoning_flow_figures",
-    "graph":            "scripts.make_graph_figures",
-    "compare":          "scripts.make_compare_figures",
-    "figures":          "scripts.make_figures",
+    "reasoning-flow": "scripts.make_reasoning_flow_figures",
+    "graph": "scripts.make_graph_figures",
+    "compare": "scripts.make_compare_figures",
+    "figures": "scripts.make_figures",
 }
 
 
 def _usage() -> str:
     cmds = "\n  ".join(sorted(SUBCOMMANDS))
     return (
-        "usage: adreason-figures <subcommand> [script-args...]\n\n"
-        "available subcommands:\n  " + cmds
+        "usage: adreason-figures <subcommand> [script-args...]\n\navailable subcommands:\n  " + cmds
     )
 
 

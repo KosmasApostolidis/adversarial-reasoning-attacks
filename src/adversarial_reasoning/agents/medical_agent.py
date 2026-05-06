@@ -238,7 +238,7 @@ class MedicalAgent(AgentBase):
             (call_spec[k] for k in self._TOOL_NAME_KEYS if k in call_spec),
             "",
         )
-        args = (
+        args: dict[str, Any] = (
             next(
                 (call_spec[k] for k in self._TOOL_ARGS_KEYS if k in call_spec),
                 {},

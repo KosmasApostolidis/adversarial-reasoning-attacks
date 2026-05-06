@@ -197,8 +197,7 @@ def test_linf_loop_prefers_finite_restart_over_nan_restart():
         "best-of-N comparison failed to guard against NaN"
     )
     assert res.metadata["restart"] == 1, (
-        "expected restart=1 (the finite one) to be selected, got "
-        f"restart={res.metadata['restart']}"
+        f"expected restart=1 (the finite one) to be selected, got restart={res.metadata['restart']}"
     )
 
 

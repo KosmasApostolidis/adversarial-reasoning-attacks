@@ -96,7 +96,12 @@ def _cli() -> int:
     import argparse
 
     p = argparse.ArgumentParser(description="Phase-0 preprocessing-transfer gate")
-    p.add_argument("--image", type=str, default=None, help="Path to sample image (PNG/JPG). Synthetic if omitted.")
+    p.add_argument(
+        "--image",
+        type=str,
+        default=None,
+        help="Path to sample image (PNG/JPG). Synthetic if omitted.",
+    )
     p.add_argument("--model-name", type=str, default="generic", help="Label for report only.")
     p.add_argument("--epsilon", type=float, default=16.0 / 255.0)
     p.add_argument("--gate-threshold", type=float, default=2.0 / 255.0)

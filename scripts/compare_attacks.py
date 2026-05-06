@@ -26,7 +26,6 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 
-
 ATTACK_COLORS = {
     "noise": "#888888",
     "pgd": "#c62828",
@@ -44,14 +43,12 @@ ATTACK_LABELS = {
 
 
 def _load_records(records_path: Path) -> list[dict]:
-    return [
-        json.loads(line)
-        for line in records_path.read_text().splitlines()
-        if line.strip()
-    ]
+    return [json.loads(line) for line in records_path.read_text().splitlines() if line.strip()]
 
 
-def _bootstrap_ci(values: np.ndarray, n_boot: int = 1000, alpha: float = 0.05) -> tuple[float, float]:
+def _bootstrap_ci(
+    values: np.ndarray, n_boot: int = 1000, alpha: float = 0.05
+) -> tuple[float, float]:
     if values.size == 0:
         return (0.0, 0.0)
     rng = np.random.default_rng(0)
@@ -101,14 +98,18 @@ def bar_with_ci(by_attack: dict[str, np.ndarray], out_path: Path) -> None:
     names = list(by_attack)
     means = np.array([by_attack[n].mean() if by_attack[n].size else 0.0 for n in names])
     cis = [_bootstrap_ci(by_attack[n]) for n in names]
-    err_lo = np.array([m - lo for m, (lo, _) in zip(means, cis)])
-    err_hi = np.array([hi - m for m, (_, hi) in zip(means, cis)])
+    err_lo = np.array([m - lo for m, (lo, _) in zip(means, cis, strict=False)])
+    err_hi = np.array([hi - m for m, (_, hi) in zip(means, cis, strict=False)])
     colors = [ATTACK_COLORS.get(n, "#444444") for n in names]
 
     fig, ax = plt.subplots(figsize=(max(7, 1.5 * len(names)), 4.5))
     ax.bar(
-        names, means, color=colors, alpha=0.9,
-        yerr=[err_lo, err_hi], capsize=6,
+        names,
+        means,
+        color=colors,
+        alpha=0.9,
+        yerr=[err_lo, err_hi],
+        capsize=6,
         tick_label=[ATTACK_LABELS.get(n, n) for n in names],
     )
     ax.set_ylabel("Mean edit distance (95% bootstrap CI)", fontsize=11)
@@ -131,7 +132,11 @@ def line_vs_eps(records_by_attack: dict[str, list[dict]], out_path: Path) -> Non
         means = [float(np.mean(groups[e])) for e in eps_vals]
         sems = [float(np.std(groups[e]) / max(1, len(groups[e]) ** 0.5)) for e in eps_vals]
         ax.errorbar(
-            eps_vals, means, yerr=sems, marker="o", capsize=4,
+            eps_vals,
+            means,
+            yerr=sems,
+            marker="o",
+            capsize=4,
             color=ATTACK_COLORS.get(name, "#444444"),
             label=ATTACK_LABELS.get(name, name),
         )
@@ -202,14 +207,15 @@ def _pgd_noise_compare(noise_path: Path, pgd_path: Path, out_dir: Path) -> int:
     )
     ax.grid(axis="y", linestyle=":", alpha=0.4)
     for i, (_label, arr) in enumerate([("noise", nd), ("PGD", pd_)], start=1):
-        ax.text(i, max(arr.max(), 0.05) + 0.04,
-                f"mean={arr.mean():.3f}", ha="center", fontsize=10)
+        ax.text(i, max(arr.max(), 0.05) + 0.04, f"mean={arr.mean():.3f}", ha="center", fontsize=10)
     plt.tight_layout()
     fig.savefig(out_dir / "pgd_vs_noise_box.png", dpi=140)
     plt.close(fig)
 
-    print(f"[compare_attacks pgd_noise] noise mean={nd.mean():.3f}  "
-          f"PGD mean={pd_.mean():.3f}  Δ={pd_.mean()-nd.mean():+.3f}")
+    print(
+        f"[compare_attacks pgd_noise] noise mean={nd.mean():.3f}  "
+        f"PGD mean={pd_.mean():.3f}  Δ={pd_.mean() - nd.mean():+.3f}"
+    )
     print(f"[compare_attacks pgd_noise] wrote → {out_dir}")
     return 0
 
@@ -217,11 +223,14 @@ def _pgd_noise_compare(noise_path: Path, pgd_path: Path, out_dir: Path) -> int:
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument(
-        "--mode", choices=["default", "pgd_noise"], default="default",
+        "--mode",
+        choices=["default", "pgd_noise"],
+        default="default",
         help="default: N-attack aggregate. pgd_noise: PGD-vs-noise boxplot.",
     )
     ap.add_argument(
-        "--runs", nargs="+",
+        "--runs",
+        nargs="+",
         help="[default mode] One or more 'name=path' entries (dir or records.jsonl).",
     )
     ap.add_argument("--noise", help="[pgd_noise mode] records.jsonl from noise run.")

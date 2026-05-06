@@ -49,7 +49,7 @@ class ToolRegistry:
     def schemas(self) -> list[dict[str, Any]]:
         return [t.schema_dict() for t in self._tools.values()]
 
-    def subset(self, names: list[str]) -> "ToolRegistry":
+    def subset(self, names: list[str]) -> ToolRegistry:
         new = ToolRegistry()
         for n in names:
             new.register(self.get(n))

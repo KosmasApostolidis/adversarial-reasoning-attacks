@@ -49,9 +49,7 @@ def test_token_target_loss_sign_convention_untargeted():
     # Reference: compute CE manually and confirm the sign flip.
     input_ids = torch.cat([prompt, target], dim=-1)
     logits = vlm.forward_with_logits(image, input_ids)
-    ref_ce = F.cross_entropy(
-        logits[:, 0:1, :].reshape(-1, logits.shape[-1]), target.reshape(-1)
-    )
+    ref_ce = F.cross_entropy(logits[:, 0:1, :].reshape(-1, logits.shape[-1]), target.reshape(-1))
     assert torch.allclose(val, -ref_ce, atol=1e-6)
 
 

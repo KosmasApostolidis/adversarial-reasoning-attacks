@@ -163,9 +163,9 @@ def test_build_stats_table_is_deterministic_with_pinned_seed(tmp_path: Path) -> 
     out_b = tmp_path / "b.tex"
     bst.build_stats_table(runs_dir, out_a, n_resamples=200, bootstrap_seed=0)
     bst.build_stats_table(runs_dir, out_b, n_resamples=200, bootstrap_seed=0)
-    assert (
-        out_a.read_bytes() == out_b.read_bytes()
-    ), "bootstrap_seed=0 must produce identical output across runs"
+    assert out_a.read_bytes() == out_b.read_bytes(), (
+        "bootstrap_seed=0 must produce identical output across runs"
+    )
 
 
 def test_stats_rows_carry_pvalue_status(tmp_path: Path) -> None:
@@ -221,9 +221,9 @@ def test_stats_rows_carry_pvalue_status(tmp_path: Path) -> None:
     # All-zero deltas force scipy.wilcoxon into a degenerate path
     # (NaN p-value, or ValueError depending on scipy version). Either
     # is fine — the contract is that it MUST NOT silently report ok.
-    assert any(
-        row["pvalue_status"] in {"valuerror", "nan"} for row in stat_rows
-    ), "all-zero deltas must surface as a non-ok status, not silently ok"
+    assert any(row["pvalue_status"] in {"valuerror", "nan"} for row in stat_rows), (
+        "all-zero deltas must surface as a non-ok status, not silently ok"
+    )
 
 
 def test_build_stats_table_aborts_when_no_noise_records(tmp_path: Path) -> None:

@@ -78,7 +78,7 @@ class VLMBase(ABC):
         image: Image.Image,
         prompt: str,
         tools_schema: list[dict] | None = None,
-    ) -> "AttackInputs":
+    ) -> AttackInputs:
         """Tokenize prompt + preprocess image into tensors ready for an attack.
 
         Returns a dict matching :class:`adversarial_reasoning.types.AttackInputs`:

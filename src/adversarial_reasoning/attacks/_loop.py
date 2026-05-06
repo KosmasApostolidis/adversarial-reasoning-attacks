@@ -110,9 +110,8 @@ def linf_pgd_loop(
         # NaN guard: ``finite < NaN`` is False, so a NaN-loss first restart
         # would otherwise lock ``best`` and discard every legitimate later
         # restart. Prefer any finite restart over a NaN one.
-        if (
-            best is None
-            or math.isfinite(candidate.loss_final)
+        if best is None or (
+            math.isfinite(candidate.loss_final)
             and (not math.isfinite(best.loss_final) or candidate.loss_final < best.loss_final)
         ):
             best = candidate
