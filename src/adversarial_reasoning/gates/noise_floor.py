@@ -30,7 +30,7 @@ class NoiseFloorResult:
     pairwise_distances: list[float] = field(default_factory=list)
     median_distance: float = 0.0
     max_distance: float = 0.0
-    threshold_for_signal: float = 0.0   # median × 2.0 by convention
+    threshold_for_signal: float = 0.0  # median × 2.0 by convention
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -56,9 +56,7 @@ def run_noise_floor(
     if seeds is None:
         seeds = [0, 1, 2, 3, 4]
 
-    trajectories = [
-        agent.run(task_id=task_id, image=image, prompt=prompt, seed=s) for s in seeds
-    ]
+    trajectories = [agent.run(task_id=task_id, image=image, prompt=prompt, seed=s) for s in seeds]
 
     distances: list[float] = []
     for traj_a, traj_b in combinations(trajectories, 2):
@@ -73,7 +71,9 @@ def run_noise_floor(
     median = float(np.median(arr)) if arr.size else 0.0
     max_d = float(np.max(arr)) if arr.size else 0.0
     return NoiseFloorResult(
-        model_name=getattr(agent, "vlm", None).__class__.__name__ if hasattr(agent, "vlm") else "unknown",
+        model_name=getattr(agent, "vlm", None).__class__.__name__
+        if hasattr(agent, "vlm")
+        else "unknown",
         seeds=seeds,
         pairwise_distances=[float(x) for x in arr],
         median_distance=median,

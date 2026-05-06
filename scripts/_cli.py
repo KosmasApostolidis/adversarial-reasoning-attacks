@@ -3,6 +3,7 @@
 Defaults match existing hard-coded paths so calling a migrated script with
 no args reproduces today's behaviour.
 """
+
 from __future__ import annotations
 
 import argparse

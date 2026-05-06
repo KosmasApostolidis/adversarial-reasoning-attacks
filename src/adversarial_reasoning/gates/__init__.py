@@ -9,10 +9,10 @@ attack results are considered meaningful:
 """
 
 __all__ = [
-    "PreprocessingTransferResult",
-    "run_preprocessing_transfer",
     "NoiseFloorResult",
+    "PreprocessingTransferResult",
     "run_noise_floor",
+    "run_preprocessing_transfer",
 ]
 
 
@@ -22,10 +22,13 @@ def __getattr__(name: str):  # PEP 562 lazy import
             PreprocessingTransferResult,
             run_preprocessing_transfer,
         )
-        return {"PreprocessingTransferResult": PreprocessingTransferResult,
-                "run_preprocessing_transfer": run_preprocessing_transfer}[name]
+
+        return {
+            "PreprocessingTransferResult": PreprocessingTransferResult,
+            "run_preprocessing_transfer": run_preprocessing_transfer,
+        }[name]
     if name in ("NoiseFloorResult", "run_noise_floor"):
         from .noise_floor import NoiseFloorResult, run_noise_floor
-        return {"NoiseFloorResult": NoiseFloorResult,
-                "run_noise_floor": run_noise_floor}[name]
+
+        return {"NoiseFloorResult": NoiseFloorResult, "run_noise_floor": run_noise_floor}[name]
     raise AttributeError(name)

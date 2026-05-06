@@ -53,9 +53,7 @@ class LossFn(Protocol):
     ) -> torch.Tensor: ...
 
 
-def _logits_for_target(
-    logits: torch.Tensor, t_prompt: int, t_target: int
-) -> torch.Tensor:
+def _logits_for_target(logits: torch.Tensor, t_prompt: int, t_target: int) -> torch.Tensor:
     """Slice causal-LM logits scoring the teacher-forced ``target`` tokens.
 
     Causal LM invariant: logits at position ``i`` predict the token at
@@ -94,9 +92,7 @@ class TokenTargetLoss:
     ) -> torch.Tensor:
         input_ids = torch.cat([prompt_tokens, target], dim=-1)
         logits = vlm.forward_with_logits(perturbed_pixels, input_ids, **gen_kwargs)
-        sliced = _logits_for_target(
-            logits, prompt_tokens.shape[-1], target.shape[-1]
-        )
+        sliced = _logits_for_target(logits, prompt_tokens.shape[-1], target.shape[-1])
         ce = F.cross_entropy(
             sliced.reshape(-1, sliced.shape[-1]),
             target.reshape(-1),
@@ -134,9 +130,7 @@ class TrajectoryDriftLoss:
         with torch.no_grad():
             input_ids = torch.cat([prompt_tokens, target], dim=-1)
             logits = vlm.forward_with_logits(x0, input_ids, **gen_kwargs)
-            sliced = _logits_for_target(
-                logits, prompt_tokens.shape[-1], target.shape[-1]
-            ).detach()
+            sliced = _logits_for_target(logits, prompt_tokens.shape[-1], target.shape[-1]).detach()
             log_benign = F.log_softmax(sliced, dim=-1)
             p_benign = log_benign.exp()
         return cls(

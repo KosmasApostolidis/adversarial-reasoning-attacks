@@ -10,51 +10,52 @@ Outputs (paper/figures/graphs/):
 
 from __future__ import annotations
 
-import json
-from collections import Counter, defaultdict
-from pathlib import Path
+from collections import Counter
 from itertools import pairwise
+from pathlib import Path
 
 import matplotlib as mpl
-import matplotlib.pyplot as plt
+import matplotlib.cm as cm
 import matplotlib.patches as mpatches
 import matplotlib.patheffects as pe
-import matplotlib.cm as cm
+import matplotlib.pyplot as plt
 import networkx as nx
 import numpy as np
 
 # ── Style ──────────────────────────────────────────────────────────────────
-mpl.rcParams.update({
-    "font.family": "DejaVu Sans",
-    "figure.facecolor": "#0d1117",
-    "axes.facecolor":   "#0d1117",
-    "text.color":       "#e6edf3",
-    "axes.labelcolor":  "#e6edf3",
-    "xtick.color":      "#8b949e",
-    "ytick.color":      "#8b949e",
-    "axes.edgecolor":   "#30363d",
-    "axes.spines.top":  False,
-    "axes.spines.right": False,
-    "savefig.dpi":      300,
-    "savefig.bbox":     "tight",
-    "savefig.facecolor": "#0d1117",
-    "figure.dpi":       120,
-})
+mpl.rcParams.update(
+    {
+        "font.family": "DejaVu Sans",
+        "figure.facecolor": "#0d1117",
+        "axes.facecolor": "#0d1117",
+        "text.color": "#e6edf3",
+        "axes.labelcolor": "#e6edf3",
+        "xtick.color": "#8b949e",
+        "ytick.color": "#8b949e",
+        "axes.edgecolor": "#30363d",
+        "axes.spines.top": False,
+        "axes.spines.right": False,
+        "savefig.dpi": 300,
+        "savefig.bbox": "tight",
+        "savefig.facecolor": "#0d1117",
+        "figure.dpi": 120,
+    }
+)
 
-C_BENIGN = "#58a6ff"    # blue
-C_NOISE  = "#3fb950"    # green
-C_PGD    = "#f85149"    # red
-C_NODE   = "#e6edf3"
+C_BENIGN = "#58a6ff"  # blue
+C_NOISE = "#3fb950"  # green
+C_PGD = "#f85149"  # red
+C_NODE = "#e6edf3"
 
 # Tool short names for labels
 SHORT = {
-    "lookup_pubmed":        "PubMed",
-    "query_guidelines":     "Guidelines",
+    "lookup_pubmed": "PubMed",
+    "query_guidelines": "Guidelines",
     "calculate_risk_score": "Risk Score",
-    "draft_report":         "Draft Report",
-    "request_followup":     "Followup",
+    "draft_report": "Draft Report",
+    "request_followup": "Followup",
     "escalate_to_specialist": "Escalate",
-    "describe_region":      "Describe",
+    "describe_region": "Describe",
 }
 
 OUT = Path("paper/figures/graphs")
@@ -87,13 +88,14 @@ def _build_transition_graph(records: list[dict], key: str) -> nx.DiGraph:
 # Graph 1 — Transition network: benign vs PGD overlaid
 # ═══════════════════════════════════════════════════════════════════════════
 
+
 def graph1_transition_network() -> None:
     pgd_recs = _load("runs/pgd_smoke/records.jsonl")
     Gb = _build_transition_graph(pgd_recs, "benign")
     Gp = _build_transition_graph(pgd_recs, "attacked")
 
     all_nodes = set(Gb.nodes) | set(Gp.nodes)
-    G_layout  = nx.DiGraph()
+    G_layout = nx.DiGraph()
     G_layout.add_nodes_from(all_nodes)
     for u, v, d in Gb.edges(data=True):
         G_layout.add_edge(u, v, weight=d["weight"])
@@ -110,8 +112,10 @@ def graph1_transition_network() -> None:
             w = d.get("weight", 1)
             ax.annotate(
                 "",
-                xy=pos[v], xycoords="data",
-                xytext=pos[u], textcoords="data",
+                xy=pos[v],
+                xycoords="data",
+                xytext=pos[u],
+                textcoords="data",
                 arrowprops=dict(
                     arrowstyle="-|>",
                     color=color,
@@ -124,34 +128,55 @@ def graph1_transition_network() -> None:
             )
 
     draw_edges(Gb, C_BENIGN, 0.8, lw_scale=2.0, rad=0.12)
-    draw_edges(Gp, C_PGD,    0.8, lw_scale=2.0, rad=-0.12)
+    draw_edges(Gp, C_PGD, 0.8, lw_scale=2.0, rad=-0.12)
 
     # Nodes
-    all_counts = {n: Gb.nodes.get(n, {}).get("count", 0) + Gp.nodes.get(n, {}).get("count", 0)
-                  for n in all_nodes}
+    all_counts = {
+        n: Gb.nodes.get(n, {}).get("count", 0) + Gp.nodes.get(n, {}).get("count", 0)
+        for n in all_nodes
+    }
     node_sizes = [200 + all_counts.get(n, 0) * 80 for n in all_nodes]
     nx.draw_networkx_nodes(
-        G_layout, pos, nodelist=list(all_nodes),
+        G_layout,
+        pos,
+        nodelist=list(all_nodes),
         node_size=node_sizes,
-        node_color="#21262d", edgecolors="#58a6ff", linewidths=2.0,
+        node_color="#21262d",
+        edgecolors="#58a6ff",
+        linewidths=2.0,
         ax=ax,
     )
     labels = {n: _short(n) for n in all_nodes}
     nx.draw_networkx_labels(
-        G_layout, pos, labels=labels,
-        font_size=8, font_color=C_NODE, font_weight="bold",
+        G_layout,
+        pos,
+        labels=labels,
+        font_size=8,
+        font_color=C_NODE,
+        font_weight="bold",
         ax=ax,
     )
 
     legend_elements = [
         mpatches.Patch(color=C_BENIGN, label="Benign trajectory"),
-        mpatches.Patch(color=C_PGD,    label="PGD-attacked trajectory"),
+        mpatches.Patch(color=C_PGD, label="PGD-attacked trajectory"),
     ]
-    ax.legend(handles=legend_elements, loc="upper left",
-              framealpha=0.2, frameon=True, facecolor="#161b22",
-              edgecolor="#30363d", fontsize=10)
-    ax.set_title("Tool-call transition graph: benign vs PGD-L∞ attack",
-                 fontsize=14, fontweight="bold", pad=15, color=C_NODE)
+    ax.legend(
+        handles=legend_elements,
+        loc="upper left",
+        framealpha=0.2,
+        frameon=True,
+        facecolor="#161b22",
+        edgecolor="#30363d",
+        fontsize=10,
+    )
+    ax.set_title(
+        "Tool-call transition graph: benign vs PGD-L∞ attack",
+        fontsize=14,
+        fontweight="bold",
+        pad=15,
+        color=C_NODE,
+    )
     ax.axis("off")
     fig.savefig(OUT / "graph1_transition_network.png")
     plt.close(fig)
@@ -162,8 +187,9 @@ def graph1_transition_network() -> None:
 # Graph 2 — Side-by-side rewiring
 # ═══════════════════════════════════════════════════════════════════════════
 
+
 def graph2_rewiring() -> None:
-    pgd_recs   = _load("runs/pgd_smoke/records.jsonl")
+    pgd_recs = _load("runs/pgd_smoke/records.jsonl")
     noise_recs = _load("runs/smoke/records.jsonl")
 
     all_tools: set[str] = set()
@@ -186,15 +212,15 @@ def graph2_rewiring() -> None:
 
     # Fixed circular layout for both panels
     angles = np.linspace(0, 2 * np.pi, len(tools), endpoint=False)
-    pos = {t: (np.cos(a) * 1.4, np.sin(a) * 1.4) for t, a in zip(tools, angles)}
+    pos = {t: (np.cos(a) * 1.4, np.sin(a) * 1.4) for t, a in zip(tools, angles, strict=False)}
 
     fig, axes = plt.subplots(1, 2, figsize=(16, 8))
-    titles    = ["Benign trajectory", "PGD-attacked trajectory"]
-    nf_list   = [bn_freq, pn_freq]
-    ef_list   = [be_freq, pe_freq]
-    colors    = [C_BENIGN, C_PGD]
+    titles = ["Benign trajectory", "PGD-attacked trajectory"]
+    nf_list = [bn_freq, pn_freq]
+    ef_list = [be_freq, pe_freq]
+    colors = [C_BENIGN, C_PGD]
 
-    for ax, title, nf, ef, ec in zip(axes, titles, nf_list, ef_list, colors):
+    for ax, title, nf, ef, ec in zip(axes, titles, nf_list, ef_list, colors, strict=False):
         G = nx.DiGraph()
         G.add_nodes_from(tools)
         for (u, v), w in ef.items():
@@ -202,12 +228,14 @@ def graph2_rewiring() -> None:
 
         # Edges
         for u, v, d in G.edges(data=True):
-            w   = d["weight"]
+            w = d["weight"]
             rad = 0.18 if u != v else 0
             ax.annotate(
                 "",
-                xy=pos[v], xycoords="data",
-                xytext=pos[u], textcoords="data",
+                xy=pos[v],
+                xycoords="data",
+                xytext=pos[u],
+                textcoords="data",
                 arrowprops=dict(
                     arrowstyle="-|>",
                     color=ec,
@@ -222,15 +250,19 @@ def graph2_rewiring() -> None:
         # Nodes
         for t in tools:
             sz = 0.06 + nf.get(t, 0) * 0.018
-            circle = plt.Circle(pos[t], sz, color="#21262d",
-                                zorder=3, linewidth=2)
+            circle = plt.Circle(pos[t], sz, color="#21262d", zorder=3, linewidth=2)
             circle.set_edgecolor(ec)
             circle.set_linewidth(2.2)
             ax.add_patch(circle)
             ax.text(
-                pos[t][0] * 1.18, pos[t][1] * 1.18,
-                _short(t), ha="center", va="center",
-                fontsize=8, fontweight="bold", color=C_NODE,
+                pos[t][0] * 1.18,
+                pos[t][1] * 1.18,
+                _short(t),
+                ha="center",
+                va="center",
+                fontsize=8,
+                fontweight="bold",
+                color=C_NODE,
                 zorder=5,
                 path_effects=[pe.withStroke(linewidth=2, foreground="#0d1117")],
             )
@@ -241,8 +273,13 @@ def graph2_rewiring() -> None:
         ax.axis("off")
         ax.set_title(title, fontsize=13, fontweight="bold", color=ec, pad=10)
 
-    fig.suptitle("Agent decision-flow rewiring under adversarial attack",
-                 fontsize=15, fontweight="bold", color=C_NODE, y=1.01)
+    fig.suptitle(
+        "Agent decision-flow rewiring under adversarial attack",
+        fontsize=15,
+        fontweight="bold",
+        color=C_NODE,
+        y=1.01,
+    )
     fig.savefig(OUT / "graph2_rewiring.png")
     plt.close(fig)
     print("graph2 ✓")
@@ -252,15 +289,19 @@ def graph2_rewiring() -> None:
 # Graph 3 — Radial trajectory arcs (polar)
 # ═══════════════════════════════════════════════════════════════════════════
 
+
 def graph3_radial_trajectories() -> None:
-    pgd_recs   = _load("runs/pgd_smoke/records.jsonl")
+    pgd_recs = _load("runs/pgd_smoke/records.jsonl")
     noise_recs = {r["sample_id"]: r for r in _load("runs/smoke/records.jsonl")}
 
-    all_tools: list[str] = sorted({
-        t for r in pgd_recs
-        for seq in [r["benign"]["tool_sequence"], r["attacked"]["tool_sequence"]]
-        for t in seq
-    })
+    all_tools: list[str] = sorted(
+        {
+            t
+            for r in pgd_recs
+            for seq in [r["benign"]["tool_sequence"], r["attacked"]["tool_sequence"]]
+            for t in seq
+        }
+    )
     n_tools = len(all_tools)
     tool_angle = {t: 2 * np.pi * i / n_tools for i, t in enumerate(all_tools)}
 
@@ -278,35 +319,36 @@ def graph3_radial_trajectories() -> None:
     CMAP_N = cm.Greens
     CMAP_P = cm.Reds
 
-    for ax, rec in zip(axes, pgd_recs):
-        sid   = rec["sample_id"]
-        nr    = noise_recs.get(sid)
-        seqs  = {
+    for ax, rec in zip(axes, pgd_recs, strict=False):
+        sid = rec["sample_id"]
+        nr = noise_recs.get(sid)
+        seqs = {
             "benign": rec["benign"]["tool_sequence"],
-            "noise":  nr["attacked"]["tool_sequence"] if nr else [],
-            "PGD":    rec["attacked"]["tool_sequence"],
+            "noise": nr["attacked"]["tool_sequence"] if nr else [],
+            "PGD": rec["attacked"]["tool_sequence"],
         }
-        cmaps   = {"benign": CMAP_B, "noise": CMAP_N, "PGD": CMAP_P}
-        radii   = {"benign": 0.72, "noise": 0.86, "PGD": 1.00}
+        cmaps = {"benign": CMAP_B, "noise": CMAP_N, "PGD": CMAP_P}
+        radii = {"benign": 0.72, "noise": 0.86, "PGD": 1.00}
 
         for condition, seq in seqs.items():
             if not seq:
                 continue
             cmap = cmaps[condition]
-            r0   = radii[condition]
-            n    = len(seq)
+            r0 = radii[condition]
+            n = len(seq)
             for step_i, tool in enumerate(seq):
-                ang  = tool_angle[tool]
+                ang = tool_angle[tool]
                 frac = step_i / max(n - 1, 1)
                 color = cmap(0.4 + 0.55 * frac)
-                ax.plot(ang, r0, "o", markersize=9 * r0,
-                        color=color, alpha=0.9, zorder=4)
+                ax.plot(ang, r0, "o", markersize=9 * r0, color=color, alpha=0.9, zorder=4)
                 if step_i > 0:
                     prev_ang = tool_angle[seq[step_i - 1]]
                     ax.annotate(
                         "",
-                        xy=(ang, r0), xycoords="data",
-                        xytext=(prev_ang, r0), textcoords="data",
+                        xy=(ang, r0),
+                        xycoords="data",
+                        xytext=(prev_ang, r0),
+                        textcoords="data",
                         arrowprops=dict(
                             arrowstyle="-|>",
                             color=color,
@@ -320,17 +362,20 @@ def graph3_radial_trajectories() -> None:
         ax.set_thetagrids(
             [np.degrees(tool_angle[t]) for t in all_tools],
             labels=[_short(t) for t in all_tools],
-            fontsize=7, color="#8b949e",
+            fontsize=7,
+            color="#8b949e",
         )
         ax.set_ylim(0, 1.15)
         ax.set_yticks([])
         ax.grid(color="#30363d", linewidth=0.5)
         pid = sid.split("_p")[1] if "_p" in sid else sid
-        pgd_ed  = rec["edit_distance_norm"]
+        pgd_ed = rec["edit_distance_norm"]
         noise_ed = nr["edit_distance_norm"] if nr else float("nan")
         ax.set_title(
             f"P{pid}\nnoise={noise_ed:.2f}  PGD={pgd_ed:.2f}",
-            fontsize=8.5, color=C_NODE, pad=14,
+            fontsize=8.5,
+            color=C_NODE,
+            pad=14,
         )
 
     # Legend
@@ -339,11 +384,21 @@ def graph3_radial_trajectories() -> None:
         mpatches.Patch(color=CMAP_N(0.7), label="Noise"),
         mpatches.Patch(color=CMAP_P(0.7), label="PGD"),
     ]
-    fig.legend(handles=handles, loc="lower center", ncol=3,
-               fontsize=10, frameon=False,
-               bbox_to_anchor=(0.5, -0.03))
-    fig.suptitle("Radial tool-trajectory chart: tool angles × trajectory rings",
-                 fontsize=13, fontweight="bold", color=C_NODE, y=1.01)
+    fig.legend(
+        handles=handles,
+        loc="lower center",
+        ncol=3,
+        fontsize=10,
+        frameon=False,
+        bbox_to_anchor=(0.5, -0.03),
+    )
+    fig.suptitle(
+        "Radial tool-trajectory chart: tool angles × trajectory rings",
+        fontsize=13,
+        fontweight="bold",
+        color=C_NODE,
+        y=1.01,
+    )
     fig.savefig(OUT / "graph3_radial_trajectories.png")
     plt.close(fig)
     print("graph3 ✓")
@@ -353,22 +408,26 @@ def graph3_radial_trajectories() -> None:
 # Graph 4 — Sankey-style flow: benign tools → fate under PGD
 # ═══════════════════════════════════════════════════════════════════════════
 
+
 def graph4_sankey() -> None:
     pgd_recs = _load("runs/pgd_smoke/records.jsonl")
 
-    all_tools: list[str] = sorted({
-        t for r in pgd_recs
-        for seq in [r["benign"]["tool_sequence"], r["attacked"]["tool_sequence"]]
-        for t in seq
-    })
+    all_tools: list[str] = sorted(
+        {
+            t
+            for r in pgd_recs
+            for seq in [r["benign"]["tool_sequence"], r["attacked"]["tool_sequence"]]
+            for t in seq
+        }
+    )
     n = len(all_tools)
 
     # Count how many times each benign tool appeared, and for each position
     # whether it was kept, substituted, or dropped in the attacked sequence
-    kept_ct:  Counter = Counter()
-    sub_ct:   Counter = Counter()
-    drop_ct:  Counter = Counter()
-    ins_ct:   Counter = Counter()
+    kept_ct: Counter = Counter()
+    sub_ct: Counter = Counter()
+    drop_ct: Counter = Counter()
+    ins_ct: Counter = Counter()
 
     for r in pgd_recs:
         b = r["benign"]["tool_sequence"]
@@ -376,9 +435,9 @@ def graph4_sankey() -> None:
         for i, bt in enumerate(b):
             if i < len(a):
                 if bt == a[i]:
-                    kept_ct[bt]  += 1
+                    kept_ct[bt] += 1
                 else:
-                    sub_ct[bt]   += 1
+                    sub_ct[bt] += 1
             else:
                 drop_ct[bt] += 1
         for i in range(len(b), len(a)):
@@ -387,35 +446,49 @@ def graph4_sankey() -> None:
     fig, ax = plt.subplots(figsize=(13, 7))
 
     X_LEFT, X_RIGHT = 0.15, 0.85
-    ys     = np.linspace(0.1, 0.9, n)
+    ys = np.linspace(0.1, 0.9, n)
     tool_y = {t: ys[i] for i, t in enumerate(all_tools)}
-    bar_h  = 0.06
+    bar_h = 0.06
 
     COLORS = {
-        "kept":  "#3fb950",
-        "sub":   "#f85149",
-        "drop":  "#8b949e",
-        "ins":   "#d2a8ff",
+        "kept": "#3fb950",
+        "sub": "#f85149",
+        "drop": "#8b949e",
+        "ins": "#d2a8ff",
     }
 
     # Left column — benign tool boxes
     for t in all_tools:
         y = tool_y[t]
         total = kept_ct[t] + sub_ct[t] + drop_ct[t]
-        ax.add_patch(mpatches.FancyBboxPatch(
-            (X_LEFT - 0.09, y - bar_h / 2), 0.08, bar_h,
-            boxstyle="round,pad=0.005",
-            facecolor="#21262d", edgecolor=C_BENIGN, linewidth=1.5,
-        ))
-        ax.text(X_LEFT - 0.05, y, _short(t),
-                ha="center", va="center", fontsize=7.5,
-                color=C_NODE, fontweight="bold")
+        ax.add_patch(
+            mpatches.FancyBboxPatch(
+                (X_LEFT - 0.09, y - bar_h / 2),
+                0.08,
+                bar_h,
+                boxstyle="round,pad=0.005",
+                facecolor="#21262d",
+                edgecolor=C_BENIGN,
+                linewidth=1.5,
+            )
+        )
+        ax.text(
+            X_LEFT - 0.05,
+            y,
+            _short(t),
+            ha="center",
+            va="center",
+            fontsize=7.5,
+            color=C_NODE,
+            fontweight="bold",
+        )
         if total > 0:
-            ax.text(X_LEFT - 0.12, y, str(total),
-                    ha="right", va="center", fontsize=8, color="#8b949e")
+            ax.text(
+                X_LEFT - 0.12, y, str(total), ha="right", va="center", fontsize=8, color="#8b949e"
+            )
 
     # Right column — fate boxes stacked
-    right_y_cursor = {t: tool_y[t] for t in all_tools}
+    {t: tool_y[t] for t in all_tools}
     fate_entries = []  # (left_tool, x_right, y_right, color, w)
 
     for lt in all_tools:
@@ -448,14 +521,16 @@ def graph4_sankey() -> None:
     for entry in fate_entries:
         lt, rt, w, fate = entry
         color = COLORS[fate]
-        lw    = 1.5 + w * 2.5
-        ly    = tool_y[lt] if lt else -0.05
-        ry    = tool_y[rt] if rt else 1.05
+        lw = 1.5 + w * 2.5
+        ly = tool_y[lt] if lt else -0.05
+        ry = tool_y[rt] if rt else 1.05
 
         ax.annotate(
             "",
-            xy=(X_RIGHT, ry), xycoords="data",
-            xytext=(X_LEFT, ly), textcoords="data",
+            xy=(X_RIGHT, ry),
+            xycoords="data",
+            xytext=(X_LEFT, ly),
+            textcoords="data",
             arrowprops=dict(
                 arrowstyle="-|>",
                 color=color,
@@ -468,25 +543,46 @@ def graph4_sankey() -> None:
         )
 
     # Right fate labels
-    for fate, label in [("kept", "Kept"), ("sub", "Substituted"),
-                        ("drop", "Dropped"), ("ins", "Inserted")]:
+    for fate, label in [
+        ("kept", "Kept"),
+        ("sub", "Substituted"),
+        ("drop", "Dropped"),
+        ("ins", "Inserted"),
+    ]:
         total = sum(w for _, _, w, f in fate_entries if f == fate)
         if total:
             ys_fate = [tool_y[rt] for _, rt, _, f in fate_entries if f == fate and rt]
             yc = np.mean(ys_fate) if ys_fate else 0.5
-            ax.text(X_RIGHT + 0.02, yc,
-                    f"{label}\n(n={total})", fontsize=8.5,
-                    color=COLORS[fate], fontweight="bold", va="center")
+            ax.text(
+                X_RIGHT + 0.02,
+                yc,
+                f"{label}\n(n={total})",
+                fontsize=8.5,
+                color=COLORS[fate],
+                fontweight="bold",
+                va="center",
+            )
 
     ax.set_xlim(0, 1.15)
     ax.set_ylim(0, 1.0)
     ax.axis("off")
-    ax.set_title("Sankey flow: benign tool fate under PGD-L∞ attack",
-                 fontsize=14, fontweight="bold", color=C_NODE, pad=15)
-    ax.text(X_LEFT - 0.05, 0.97, "Benign tools", ha="center",
-            fontsize=10, color=C_BENIGN, fontweight="bold")
-    ax.text(X_RIGHT + 0.02, 0.97, "Fate", ha="left",
-            fontsize=10, color=C_NODE, fontweight="bold")
+    ax.set_title(
+        "Sankey flow: benign tool fate under PGD-L∞ attack",
+        fontsize=14,
+        fontweight="bold",
+        color=C_NODE,
+        pad=15,
+    )
+    ax.text(
+        X_LEFT - 0.05,
+        0.97,
+        "Benign tools",
+        ha="center",
+        fontsize=10,
+        color=C_BENIGN,
+        fontweight="bold",
+    )
+    ax.text(X_RIGHT + 0.02, 0.97, "Fate", ha="left", fontsize=10, color=C_NODE, fontweight="bold")
 
     fig.savefig(OUT / "graph4_sankey.png")
     plt.close(fig)
@@ -497,20 +593,21 @@ def graph4_sankey() -> None:
 # Graph 5 — Pairwise trajectory similarity matrix (all conditions)
 # ═══════════════════════════════════════════════════════════════════════════
 
+
 def graph5_similarity_matrix() -> None:
     from adversarial_reasoning.metrics.trajectory import trajectory_edit_distance
 
-    pgd_recs   = _load("runs/pgd_smoke/records.jsonl")
+    pgd_recs = _load("runs/pgd_smoke/records.jsonl")
     noise_recs = {r["sample_id"]: r for r in _load("runs/smoke/records.jsonl")}
 
     # Build (label, sequence) list per patient
-    patient_ids = [r["sample_id"].split("_p")[1] for r in pgd_recs]
+    [r["sample_id"].split("_p")[1] for r in pgd_recs]
     all_seqs: list[tuple[str, list[str]]] = []
     all_labels: list[str] = []
 
     for r in pgd_recs:
         pid = r["sample_id"].split("_p")[1]
-        nr  = noise_recs.get(r["sample_id"])
+        nr = noise_recs.get(r["sample_id"])
         all_seqs.append((f"B·{pid}", r["benign"]["tool_sequence"]))
         all_seqs.append((f"N·{pid}", nr["attacked"]["tool_sequence"] if nr else []))
         all_seqs.append((f"P·{pid}", r["attacked"]["tool_sequence"]))
@@ -525,9 +622,9 @@ def graph5_similarity_matrix() -> None:
     # Cluster by condition groups
     fig, ax = plt.subplots(figsize=(11, 9))
     cmap = cm.get_cmap("magma")
-    im   = ax.imshow(mat, cmap=cmap, vmin=0, vmax=1, aspect="auto")
+    im = ax.imshow(mat, cmap=cmap, vmin=0, vmax=1, aspect="auto")
 
-    labels = [l for l, _ in all_seqs]
+    labels = [lbl for lbl, _ in all_seqs]
     ax.set_xticks(range(n))
     ax.set_yticks(range(n))
     ax.set_xticklabels(labels, rotation=45, ha="right", fontsize=8.5)
@@ -536,10 +633,9 @@ def graph5_similarity_matrix() -> None:
     # Annotate cells
     for i in range(n):
         for j in range(n):
-            v     = mat[i, j]
+            v = mat[i, j]
             tcolor = "white" if v > 0.5 else "#cccccc"
-            ax.text(j, i, f"{v:.2f}", ha="center", va="center",
-                    fontsize=7, color=tcolor)
+            ax.text(j, i, f"{v:.2f}", ha="center", va="center", fontsize=7, color=tcolor)
 
     # Draw group separators every 3 rows/cols
     for k in range(1, len(pgd_recs)):
@@ -554,9 +650,11 @@ def graph5_similarity_matrix() -> None:
     # Legend for condition codes
     legend_txt = "B = benign  ·  N = noise-attacked  ·  P = PGD-attacked"
     ax.set_title(
-        f"Pairwise trajectory edit-distance matrix (all conditions, n=5 patients)\n"
-        f"{legend_txt}",
-        fontsize=11, fontweight="bold", color=C_NODE, pad=12,
+        f"Pairwise trajectory edit-distance matrix (all conditions, n=5 patients)\n{legend_txt}",
+        fontsize=11,
+        fontweight="bold",
+        color=C_NODE,
+        pad=12,
     )
     fig.savefig(OUT / "graph5_similarity_matrix.png")
     plt.close(fig)

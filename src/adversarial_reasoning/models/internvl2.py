@@ -277,7 +277,7 @@ class InternVL2(VLMBase):
             return_dict=True,
             **forward_kwargs,
         )
-        return outputs.logits
+        return cast(torch.Tensor, outputs.logits)
 
     def generate_from_pixel_values(  # type: ignore[override]
         self,

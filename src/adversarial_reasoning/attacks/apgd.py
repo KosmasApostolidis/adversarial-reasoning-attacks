@@ -40,7 +40,7 @@ def _checkpoints(n_iter: int) -> list[int]:
     while p[-1] < 1.0:
         nxt = p[-1] + max(p[-1] - p[-2] - 0.03, 0.06)
         p.append(min(nxt, 1.0))
-    pts = sorted({max(1, int(math.ceil(pj * n_iter))) for pj in p[1:]})
+    pts = sorted({max(1, math.ceil(pj * n_iter)) for pj in p[1:]})
     return [c for c in pts if c <= n_iter]
 
 

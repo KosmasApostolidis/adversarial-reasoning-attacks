@@ -3,6 +3,7 @@
 Public API. Heavy submodules (torch / transformers) are deferred via
 lazy attribute access so ``import adversarial_reasoning`` is cheap.
 """
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
@@ -63,6 +64,7 @@ _LAZY_IMPORTS = {
 def __getattr__(name: str) -> Any:
     if name in _LAZY_IMPORTS:
         import importlib
+
         module_name, attr = _LAZY_IMPORTS[name]
         return getattr(importlib.import_module(module_name), attr)
     raise AttributeError(f"module 'adversarial_reasoning' has no attribute {name!r}")
