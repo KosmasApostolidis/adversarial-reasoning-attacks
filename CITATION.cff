@@ -10,8 +10,8 @@ authors:
   - family-names: Apostolidis
     given-names: Kosmas
     email: cosmasapostolidis@gmail.com
-version: 0.1.0
-date-released: "2026-04-24"
+version: 0.2.0
+date-released: "2026-05-06"
 keywords:
   - adversarial-attacks
   - vision-language-models

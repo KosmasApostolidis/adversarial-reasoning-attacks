@@ -1,0 +1,33 @@
+# Phase 0e baseline: undefended LLaVA-v1.6-Vicuna-13B under PGD-L∞ at the
+# canonical T3 eval budget (4/255, 8/255). Pairs 1:1 with
+# defended_llava13b.yaml on seed/task/attack/eps to make a valid Wilcoxon
+# signed-rank input for the T3 gate.
+#
+# Selected as the third VLM in the benchmark in place of the gated
+# meta-llama/Llama-3.2-11B-Vision-Instruct (no Meta license grant
+# available). Comparable size class (13B vs 11B), open access, reuses
+# the existing `llava_next` family wrapper.
+#
+# Output records.jsonl is consumed by:
+#   art-eval-robust --baseline-records <records.jsonl>
+# in the adversarial-reasoning-training repo.
+
+experiment:
+  name: phase0e_baseline_llava13b
+  phase: "0"
+  seeds: [0]
+  output_dir: ../adversarial-reasoning-training/runs/baseline_llava13b
+
+  models:
+    - llava_v1_6_vicuna_13b
+
+  tasks:
+    - prostate_mri_workup
+    - rad_vqa_action
+    - prostate_mri_targeted
+
+  attacks:
+    - pgd_linf
+
+  # Canonical T3 eval suite (configs/defenses.yaml :: pgd.eval_eps).
+  epsilons_linf: [0.0157, 0.0314]
