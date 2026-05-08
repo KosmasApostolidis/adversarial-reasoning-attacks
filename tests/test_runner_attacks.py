@@ -237,3 +237,61 @@ def test_run_gradient_attack_full_path(
     assert out.metadata["target_tool"] == "escalate"
     assert out.metadata["target_step_k"] == 0
     assert out.metadata["targeted_hit"] == 0  # stub agent has empty tool_sequence
+
+
+def test_run_gradient_attack_reshape_fallback(
+    monkeypatch: pytest.MonkeyPatch, dummy_image: Image.Image
+) -> None:
+    """When perturbed_pv has the same ndim as pv but a different shape (e.g.,
+    the attack loop returned a flat or transposed view), run_gradient_attack
+    must reshape it back to pv.shape rather than crash."""
+    import torch
+
+    from adversarial_reasoning.agents.base import Trajectory
+    from adversarial_reasoning.attacks.base import AttackResult
+    from adversarial_reasoning.runner import attacks as runner_attacks
+
+    pv = torch.zeros(1, 3, 8, 8)
+    input_ids = torch.zeros(1, 4, dtype=torch.long)
+
+    class StubVLM:
+        def prepare_attack_inputs(self, image, prompt):
+            return {"pixel_values": pv, "input_ids": input_ids}
+
+    captured = {}
+
+    class StubAgent:
+        def run_with_pixel_values(self, *, pixel_values, **kw):
+            captured["pv_shape"] = tuple(pixel_values.shape)
+            return Trajectory(task_id="t", model_id="m", seed=0)
+
+    class StubAttack:
+        def run(self, **_):
+            return AttackResult(
+                # Same ndim (4) but different shape — exercises the reshape
+                # fallback (line 202) instead of the unsqueeze branch.
+                perturbed_image=torch.zeros(1, 8, 8, 3),
+                delta=torch.zeros(1, 8, 8, 3),
+                loss_final=0.0,
+                iterations=1,
+            )
+
+    monkeypatch.setattr(runner_attacks, "build_attack", lambda *a, **kw: StubAttack())
+    monkeypatch.setattr(
+        runner_attacks, "target_from_benign", lambda *a, **kw: torch.zeros(1, 2, dtype=torch.long)
+    )
+
+    runner_attacks.run_gradient_attack(
+        mode="pgd",
+        vlm=StubVLM(),
+        agent=StubAgent(),  # type: ignore[arg-type]
+        sample=type("S", (), {"image": dummy_image, "prompt": "?"})(),
+        benign=Trajectory(task_id="t", model_id="m", seed=0),
+        epsilon=0.01,
+        steps=1,
+        seed=0,
+        max_steps=1,
+        task_id="t",
+    )
+    # Reshape brought it back to pv.shape (1,3,8,8), not the (1,8,8,3) stub.
+    assert captured["pv_shape"] == (1, 3, 8, 8)

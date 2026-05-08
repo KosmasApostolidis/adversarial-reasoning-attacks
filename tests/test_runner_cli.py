@@ -7,6 +7,7 @@ unit-testable without GPU / heavy deps.
 
 from __future__ import annotations
 
+import json
 import textwrap
 from pathlib import Path
 
@@ -157,9 +158,10 @@ def test_noise_loop_writes_record(
     assert rc == 0
     records = (out_dir / "records.jsonl").read_text().strip().splitlines()
     assert len(records) == 1
-    summary = (out_dir / "summary.json").read_text()
-    assert '"records": 1' in summary
-    assert '"errors": 0' in summary
+    summary = json.loads((out_dir / "summary.json").read_text())
+    assert summary["records"] == 1
+    assert summary["errors"] == 0
+    assert summary["records_path"].endswith("records.jsonl")
 
 
 def test_loop_records_error_and_returns_two(
@@ -187,9 +189,9 @@ def test_loop_records_error_and_returns_two(
     out_dir = tmp_path / "out"
     rc = cli_mod.main(["--config", str(cfg), "--out", str(out_dir), "--mode", "noise"])
     assert rc == 2
-    summary = (out_dir / "summary.json").read_text()
-    assert '"errors": 1' in summary
-    assert '"records": 0' in summary
+    summary = json.loads((out_dir / "summary.json").read_text())
+    assert summary["errors"] == 1
+    assert summary["records"] == 0
 
 
 def test_loop_skips_when_no_samples(
