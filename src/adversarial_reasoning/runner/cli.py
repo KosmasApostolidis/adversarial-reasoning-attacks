@@ -42,9 +42,17 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Allow overwriting an existing records.jsonl (default: abort if exists)",
     )
+    p.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Resolve config, print RunnerConfig, exit before any model load.",
+    )
     args = p.parse_args(argv)
 
     cfg = load_runner_config(args.config)
+    if args.dry_run:
+        print(repr(cfg))
+        return 0
     attacks_yaml = _load_yaml(args.attacks_config)
 
     out_dir = Path(args.out) if args.out else cfg.output_dir

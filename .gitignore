@@ -70,3 +70,8 @@ Thumbs.db
 *.log
 logs/
 .gitnexus
+
+# Lock-check transient artifacts
+requirements.lock.check
+.lock.expected
+.lock.actual

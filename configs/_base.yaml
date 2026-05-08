@@ -1,0 +1,11 @@
+# Shared defaults for experiment YAML configs. Children pull in via top-level
+# `_extends: _base.yaml`. Deep-merge: child keys win; nested dicts merge;
+# lists replace wholesale.
+#
+# Scope is intentionally narrow: only values that match the current
+# RunnerConfig defaults so adopting `_extends` is a *zero-behavior-change*
+# operation for any config. Future PRs may broaden the base once individual
+# configs have been audited and intentionally aligned.
+
+experiment:
+  seeds: [0]

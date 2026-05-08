@@ -46,3 +46,17 @@ jobs:
 
       - name: mypy src/
         run: mypy src/
+
+  lock-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install uv
+        run: pip install "uv>=0.5"
+
+      - name: Verify requirements.lock is in sync with pyproject.toml
+        run: make lock-check
