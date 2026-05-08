@@ -16,7 +16,7 @@ __all__ = [
 ]
 
 
-def __getattr__(name: str):  # PEP 562 lazy import
+def __getattr__(name: str) -> object:  # PEP 562 lazy import
     if name in ("PreprocessingTransferResult", "run_preprocessing_transfer"):
         from .preprocessing_transfer import (
             PreprocessingTransferResult,

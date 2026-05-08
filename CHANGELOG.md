@@ -32,6 +32,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   change runtime behavior for 28 of 31 configs (notably `task_overrides`
   for `prostate_mri_workup`). Schema validation alone is the high-value
   win in v0.3.x; broader consolidation requires per-config audit.
+- No code was removed in v0.3.x. `vulture src/ --min-confidence 80`
+  returned zero hits; lower-confidence candidates were all false positives
+  (pydantic v2 model fields, dataclass fields, lazy `__getattr__`,
+  abstract methods on `VLMBase`, gate entry points referenced from docs
+  and tests). The codebase is structurally clean post-May-6 monolith
+  split and the prior bug-fix rounds.
+
+### Mypy
+- Tightened global `[tool.mypy]` settings: `disallow_untyped_defs`,
+  `disallow_incomplete_defs`, `check_untyped_defs`,
+  `disallow_untyped_decorators`, `no_implicit_optional`,
+  `warn_unused_ignores`, `warn_redundant_casts`. The full src/ tree
+  passes (44 files, 0 errors). Heavy strict flags
+  (`disallow_any_generics`, `disallow_untyped_calls`) are deferred to
+  v0.4.x — those require typing every torch / transformers / numpy
+  call site.
+- Removed a redundant `cast` in `models/ollama_client.py` flagged by
+  the new `warn_redundant_casts` rule.
+- Annotated the `gates/__init__.__getattr__` PEP 562 lazy-import
+  shim with `-> object`.
 
 ## [0.3.0] — 2026-05-08
 

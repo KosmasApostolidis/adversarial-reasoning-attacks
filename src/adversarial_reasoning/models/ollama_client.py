@@ -6,7 +6,7 @@ import base64
 import io
 import os
 from dataclasses import dataclass, field
-from typing import Any, cast
+from typing import Any
 
 from PIL import Image
 from tenacity import Retrying, stop_after_attempt, wait_exponential
@@ -81,7 +81,7 @@ class OllamaVLMClient(VLMBase):
             wait=wait_exponential(multiplier=1, min=1, max=10),
             reraise=True,
         )
-        return cast(dict[str, Any], retryer(self._chat_once, messages, options, tools))
+        return retryer(self._chat_once, messages, options, tools)
 
     def generate(
         self,
