@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- `src/adversarial_reasoning/runner/schema.py` — pydantic v2 `ExperimentConfig`
+  with `extra="forbid"`. Catches typo'd YAML keys at load time instead of
+  silently dropping them.
+- `_extends:` top-level YAML key — children may pull defaults from a base
+  YAML via deep-merge (child wins on conflicts; nested dicts merge; lists
+  replace wholesale). Cycle-detected.
+- `configs/_base.yaml` — minimal placeholder containing only
+  `seeds: [0]`, which matches the runtime default. Adopting `_extends` is a
+  zero-behavior-change operation for every existing config.
+- `tests/test_runner_schema.py` — every committed YAML validates through
+  the schema; covers `extra="forbid"` rejection, deep-merge semantics,
+  cycle detection, and the `_LEGACY_CONFIG_LOADER=1` bypass.
+
+### Changed
+- `runner.config.load_runner_config` now resolves `_extends:` and validates
+  through `ExperimentConfig` before constructing `RunnerConfig`. Set
+  `_LEGACY_CONFIG_LOADER=1` to bypass schema validation (removed in v0.4).
+
+### Notes
+- Per-config YAML migration to `_extends: _base.yaml` is intentionally
+  deferred. Drift analysis showed adopting wider base defaults would
+  change runtime behavior for 28 of 31 configs (notably `task_overrides`
+  for `prostate_mri_workup`). Schema validation alone is the high-value
+  win in v0.3.x; broader consolidation requires per-config audit.
+
 ## [0.3.0] — 2026-05-08
 
 ### Added
