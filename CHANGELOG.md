@@ -8,6 +8,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `runner.cli` `--dry-run` flag — resolves config through the loader +
+  schema, prints `RunnerConfig.__repr__()`, exits before any model load.
+  Additive only; existing flags unchanged. Makes the runner CLI
+  unit-testable without GPU / heavy deps.
+- `tests/test_runner_cli.py` — covers `--help`, `--dry-run` (with and
+  without `_extends`), missing/bad config path, bad mode, existing-records
+  guard, full noise-loop happy path with stubbed `load_hf_vlm` /
+  `MedicalAgent` / `load_task`, error-path counting, no-samples skip, and
+  `--overwrite`. `runner/cli.py` 50% → 99% per-file.
+- `tests/test_runner_attacks.py` — covers `perturb()` dispatch (noise +
+  gradient-mode rejection + unknown), `build_attack()` table for all four
+  modes, `_build_attack_target` mode dispatch, and a stubbed
+  `run_gradient_attack` happy path validating tensor reshape, attention
+  concat, model-family extras flow, and per-mode metadata. `runner/attacks.py`
+  58% → 99% per-file.
 - `src/adversarial_reasoning/runner/schema.py` — pydantic v2 `ExperimentConfig`
   with `extra="forbid"`. Catches typo'd YAML keys at load time instead of
   silently dropping them.
