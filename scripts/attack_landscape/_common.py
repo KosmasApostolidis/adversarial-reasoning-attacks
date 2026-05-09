@@ -76,10 +76,9 @@ def cot_drifts(recs: Iterable[dict]) -> np.ndarray:
 
 
 def has_cot(by_attack: dict[str, list[dict]]) -> bool:
-    for recs in by_attack.values():
-        if any("cot_drift_score" in r for r in recs):
-            return True
-    return False
+    return any(
+        any("cot_drift_score" in r for r in recs) for recs in by_attack.values()
+    )
 
 
 def flip_rate(recs: list[dict]) -> float:

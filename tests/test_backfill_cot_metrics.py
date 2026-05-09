@@ -9,8 +9,6 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import pytest
-
 from scripts.backfill_cot_metrics import CoT_FIELDS, backfill
 
 

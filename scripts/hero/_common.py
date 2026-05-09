@@ -123,10 +123,9 @@ def has_cot(by_attack: dict[str, list[dict]]) -> bool:
     """Returns True iff at least one record across all attacks carries
     cot_drift_score. Lets figure dispatchers skip CoT panels gracefully
     when records are pre-v0.4.0."""
-    for recs in by_attack.values():
-        if any("cot_drift_score" in r for r in recs):
-            return True
-    return False
+    return any(
+        any("cot_drift_score" in r for r in recs) for recs in by_attack.values()
+    )
 
 
 def bootstrap_ci(values, n_boot=2000, alpha=0.05, seed=0):

@@ -113,7 +113,8 @@ def main(argv: list[str] | None = None) -> int:
     args = p.parse_args(argv)
 
     if args.stub_nli:
-        nli = lambda p, h: 0.5
+        def nli(premise: str, hypothesis: str) -> float:
+            return 0.5
     else:
         from adversarial_reasoning.metrics.nli import entailment_prob as nli
 

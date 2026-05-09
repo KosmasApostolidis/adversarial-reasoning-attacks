@@ -94,10 +94,10 @@ def fig_cot_overlay(by_attack, out_path: Path) -> None:
         fmt="none", ecolor=TEXT_MUTED, elinewidth=0.9, capsize=3,
     )
 
-    for rect, val in zip(bars_ed, ed_means):
+    for rect, val in zip(bars_ed, ed_means, strict=True):
         ax.text(rect.get_x() + rect.get_width() / 2, val + 0.015, f"{val:.2f}",
                 ha="center", color=TEXT, fontsize=9)
-    for rect, val in zip(bars_dr, dr_means):
+    for rect, val in zip(bars_dr, dr_means, strict=True):
         ax.text(rect.get_x() + rect.get_width() / 2, val + 0.015, f"{val:.2f}",
                 ha="center", color=TEXT, fontsize=9)
 
