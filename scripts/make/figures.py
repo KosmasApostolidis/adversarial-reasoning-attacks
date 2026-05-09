@@ -27,8 +27,9 @@ from typing import Any
 
 import matplotlib.pyplot as plt
 import numpy as np
-from _plotlib import load_records, tool_palette
 from matplotlib.patches import Rectangle
+
+from scripts._plotlib import load_records, tool_palette
 
 
 def _load_gate(path: Path) -> dict[str, Any] | None:

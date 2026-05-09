@@ -15,8 +15,8 @@ documented; pick before §0.3.
 
 > Two known code blockers must be addressed before §4 produces correct
 > outputs:
-> 1. `scripts/build_stats_table.py` does not yet exist — required for §4.1.
-> 2. `scripts/make_paper_figures.py` (and 3 sibling monoliths) load
+> 1. `scripts/diagnostics/build_stats_table.py` does not yet exist — required for §4.1.
+> 2. `scripts/make/paper_figures.py` (and 3 sibling monoliths) load
 >    Phase-1 paths (`runs/smoke/`, `runs/pgd_smoke/`, …) instead of
 >    `runs/main/<mode>/` — required fix for §4.2.
 >
@@ -458,7 +458,7 @@ export NLI_MODEL_REVISION="${HF_HUB_REVISION}"
 
 # Backfill each leg in place (idempotent — safe to re-run):
 for mode in noise pgd apgd trajectory_drift targeted_tool; do
-    python scripts/backfill_cot_metrics.py \
+    python scripts/dataprep/backfill_cot_metrics.py \
         --in  runs/main/${mode}/records.jsonl \
         --out runs/main/${mode}/records_cot.jsonl
 done
@@ -467,7 +467,7 @@ done
 Pre-v0.4 sweeps that lack `reasoning_trace` are skipped silently —
 re-run the affected legs through §2 with the v0.4 runner to recapture.
 
-### 4.1 Stats table  ⚠ blocker — `scripts/build_stats_table.py` does not exist
+### 4.1 Stats table  ⚠ blocker — `scripts/diagnostics/build_stats_table.py` does not exist
 
 This is a hard prerequisite for the paper main result table. Build the
 script before running the next command. Implementation spec:
@@ -490,7 +490,7 @@ script before running the next command. Implementation spec:
 Once built, run:
 
 ```bash
-python scripts/build_stats_table.py \
+python scripts/diagnostics/build_stats_table.py \
     --runs-dir runs/main \
     --out paper/tables/main_benchmark.tex \
     --cot-out paper/tables/cot_benchmark.tex   # optional CoT sibling table
@@ -505,8 +505,8 @@ soft-skipped if the records lack CoT fields (run §4.0 first).
 
 ### 4.2 Figures  ⚠ blocker — figure scripts read Phase-1 paths
 
-`scripts/make_paper_figures.py`, `scripts/make_hero_figures.py`, and
-`scripts/make_attack_landscape.py` each call `load_records()` with hard-coded
+`scripts/make/paper_figures.py`, `scripts/make/hero_figures.py`, and
+`scripts/make/attack_landscape.py` each call `load_records()` with hard-coded
 Phase-1 paths (`runs/smoke/`, `runs/pgd_smoke/`, `runs/smoke_sweep/`,
 `runs/apgd_sweep/`, `runs/targeted_tool_sweep/`,
 `runs/trajectory_drift_sweep/`, etc). Running `make figures` after
@@ -521,10 +521,10 @@ every per-attack `load_records(...)` call at the matching
 ```bash
 # Audit the current Phase-1 paths (gives you the list of lines to fix):
 grep -nE 'runs/(smoke|pgd_smoke|apgd_smoke|apgd_sweep|targeted_tool_smoke|targeted_tool_sweep|trajectory_drift_smoke|trajectory_drift_sweep|smoke_sweep|smoke_llava)/records\.jsonl' \
-  scripts/make_paper_figures.py \
-  scripts/make_hero_figures.py \
-  scripts/make_attack_landscape.py \
-  scripts/make_comprehensive_figures.py
+  scripts/make/paper_figures.py \
+  scripts/make/hero_figures.py \
+  scripts/make/attack_landscape.py \
+  scripts/make/comprehensive_figures.py
 
 # Mechanical mapping (apply via your editor or sed -i):
 #   runs/smoke/records.jsonl                 → runs/main/noise/records.jsonl
@@ -542,8 +542,8 @@ grep -nE 'runs/(smoke|pgd_smoke|apgd_smoke|apgd_sweep|targeted_tool_smoke|target
 Reference sed for the simple cases (run from repo root, on each script):
 
 ```bash
-for f in scripts/make_paper_figures.py scripts/make_hero_figures.py \
-         scripts/make_attack_landscape.py scripts/make_comprehensive_figures.py; do
+for f in scripts/make/paper_figures.py scripts/make/hero_figures.py \
+         scripts/make/attack_landscape.py scripts/make/comprehensive_figures.py; do
   sed -i \
     -e 's|runs/smoke/records\.jsonl|runs/main/noise/records.jsonl|g' \
     -e 's|runs/smoke_sweep/records\.jsonl|runs/main/noise/records.jsonl|g' \
@@ -560,10 +560,10 @@ done
 
 # Verify the audit grep above now returns 0 hits:
 grep -cE 'runs/(smoke|pgd_smoke|apgd_(smoke|sweep)|targeted_tool_(smoke|sweep)|trajectory_drift_(smoke|sweep)|smoke_sweep|smoke_llava)/records\.jsonl' \
-  scripts/make_paper_figures.py \
-  scripts/make_hero_figures.py \
-  scripts/make_attack_landscape.py \
-  scripts/make_comprehensive_figures.py
+  scripts/make/paper_figures.py \
+  scripts/make/hero_figures.py \
+  scripts/make/attack_landscape.py \
+  scripts/make/comprehensive_figures.py
 # expected output: each path with count 0
 ```
 
@@ -597,11 +597,11 @@ CoT drift (the silent-corruption quadrant). Both read the
 CoT-enriched records produced by §4.0:
 
 ```bash
-python scripts/cot_null_distribution.py \
+python scripts/diagnostics/cot_null_distribution.py \
     --records runs/main/pgd/records_cot.jsonl \
     --out paper/figures/sanity/null_distribution.png
 
-python scripts/cot_confusion_matrix.py \
+python scripts/diagnostics/cot_confusion_matrix.py \
     --records runs/main/pgd/records_cot.jsonl \
     --out paper/figures/sanity/cot_confusion.png \
     --threshold 0.3        # or set from null_distribution 95%ile

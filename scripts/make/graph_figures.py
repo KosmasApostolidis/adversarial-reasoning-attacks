@@ -10,14 +10,14 @@ Outputs (paper/figures/graphs/):
 
 from __future__ import annotations
 
-from graph_figures import (
+from scripts.graph_figures import (
     graph1_transition_network,
     graph2_rewiring,
     graph3_radial_trajectories,
     graph4_sankey,
     graph5_similarity_matrix,
 )
-from graph_figures._common import OUT
+from scripts.graph_figures._common import OUT
 
 
 def main() -> int:

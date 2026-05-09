@@ -12,29 +12,17 @@ if str(_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS))
 
 from _plotlib import load_records as _load  # noqa: E402
+from _theme import DARK_AX, DARK_BG, DARK_FG, SHORT  # noqa: E402
 
 OUT = Path("paper/figures/reasoning_flow")
 OUT.mkdir(parents=True, exist_ok=True)
 
-DARK_BG = "#0d1117"
-DARK_AX = "#161b22"
-DARK_FG = "#e6edf3"
-DARK_GRID = "#21262d"
+DARK_GRID = "#21262d"  # local: differs from comprehensive (#30363d)
 C_BENIGN = "#58a6ff"  # blue
 C_NOISE = "#3fb950"  # green
 C_PGD = "#f85149"  # red
 C_BOTH = "#d2a8ff"  # purple (shared transitions)
 C_CHANGE = "#ffa657"  # orange (changed steps)
-
-SHORT = {
-    "lookup_pubmed": "PubMed",
-    "query_guidelines": "Guidelines",
-    "calculate_risk_score": "Risk Score",
-    "draft_report": "Draft Report",
-    "request_followup": "Followup",
-    "escalate_to_specialist": "Escalate",
-    "describe_region": "Describe",
-}
 
 
 def _s(t):

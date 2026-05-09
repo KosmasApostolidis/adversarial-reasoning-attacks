@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from attack_landscape import (
+from scripts.attack_landscape import (
     fig_cot_axis,
     fig_eps_curves,
     fig_landscape_overview,
@@ -20,7 +20,7 @@ from attack_landscape import (
     fig_tool_substitution,
     fig_violin_grid,
 )
-from attack_landscape._common import edits, flip_rate, has_cot, load_records
+from scripts.attack_landscape._common import edits, flip_rate, has_cot, load_records
 
 
 def main() -> int:
