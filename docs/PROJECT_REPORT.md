@@ -280,13 +280,13 @@ for atk in apgd targeted_tool trajectory_drift; do
 done
 
 # 4. figures
-python scripts/compare_attacks.py --runs apgd=runs/apgd_sweep \
+python scripts/compare/attacks.py --runs apgd=runs/apgd_sweep \
   targeted_tool=runs/targeted_tool_sweep \
   trajectory_drift=runs/trajectory_drift_sweep \
   --out paper/figures/attack_comparison
-python scripts/make_attack_landscape.py
-python scripts/make_hero_figures.py
-python scripts/compare_models.py     # cross-model
+python scripts/make/attack_landscape.py
+python scripts/make/hero_figures.py
+python scripts/compare/models.py     # cross-model
 ```
 
 All randomness funnels through `torch.manual_seed(seed)` + `numpy.random.seed(seed)` at the start of each `(seed, sample)` cell. Records are JSONL append-only, schema versioned implicitly by field set.

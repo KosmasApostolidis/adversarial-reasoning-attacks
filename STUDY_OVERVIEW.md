@@ -128,7 +128,7 @@ The study runs a controlled benchmark of pixel-space adversarial attacks against
 
 4. **Cross-model parity and HF→Ollama transfer.** Identical ε convention applied to Qwen2.5-VL-7B-Instruct and LLaVA-v1.6-Mistral-7B-hf so cross-model comparison stands. The HF fp16 surrogate is the gradient target; the Ollama Q4 quantized server is the transfer target reached through the standard chat API ([`src/adversarial_reasoning/models/ollama_client.py`](src/adversarial_reasoning/models/ollama_client.py)).
 
-5. **Reproducibility artifacts.** Full ProstateX-2 cohort fetch and DICOM → NPY preprocessing pipeline, including TCIA download orchestrator ([`scripts/fetch_prostatex_cuocolo_cohort.py`](scripts/fetch_prostatex_cuocolo_cohort.py)) and a deterministic DICOM-SEG / Cuocolo-NIfTI lesion-mask pipeline ([`scripts/preprocess_prostatex2_dicom.py`](scripts/preprocess_prostatex2_dicom.py)). All randomness funnels through `torch.manual_seed(seed)` + `numpy.random.seed(seed)` at the start of each `(seed, sample)` cell. Records are JSONL append-only; CV manifest pins random_seed=42 and explicit patient IDs per split.
+5. **Reproducibility artifacts.** Full ProstateX-2 cohort fetch and DICOM → NPY preprocessing pipeline, including TCIA download orchestrator ([`scripts/dataprep/fetch_prostatex_cuocolo_cohort.py`](scripts/dataprep/fetch_prostatex_cuocolo_cohort.py)) and a deterministic DICOM-SEG / Cuocolo-NIfTI lesion-mask pipeline ([`scripts/dataprep/preprocess_prostatex2_dicom.py`](scripts/dataprep/preprocess_prostatex2_dicom.py)). All randomness funnels through `torch.manual_seed(seed)` + `numpy.random.seed(seed)` at the start of each `(seed, sample)` cell. Records are JSONL append-only; CV manifest pins random_seed=42 and explicit patient IDs per split.
 
 ---
 
@@ -136,7 +136,7 @@ The study runs a controlled benchmark of pixel-space adversarial attacks against
 
 ### 5.1 ProstateX-2 (primary, MRI)
 
-**Source.** TCIA — The Cancer Imaging Archive — PROSTATEx collection, with lesion-mask annotations from the Cuocolo et al. public mask database ([`scripts/fetch_prostatex_cuocolo_cohort.py`](scripts/fetch_prostatex_cuocolo_cohort.py), [`scripts/preprocess_prostatex2_dicom.py`](scripts/preprocess_prostatex2_dicom.py)).
+**Source.** TCIA — The Cancer Imaging Archive — PROSTATEx collection, with lesion-mask annotations from the Cuocolo et al. public mask database ([`scripts/dataprep/fetch_prostatex_cuocolo_cohort.py`](scripts/dataprep/fetch_prostatex_cuocolo_cohort.py), [`scripts/dataprep/preprocess_prostatex2_dicom.py`](scripts/dataprep/preprocess_prostatex2_dicom.py)).
 
 **Patient count.**
 
@@ -163,7 +163,7 @@ The orchestrator iterates `--split {train, dev, test}` to cover all three folds 
 | 1 | ADC (apparent diffusion coefficient) | DICOM MR series |
 | 2 | DWI b800 (diffusion-weighted, b=800 s/mm²) | DICOM MR series |
 
-Series-description regexes broaden across three scanner families to catch all naming variants ([`scripts/preprocess_prostatex2_dicom.py`](scripts/preprocess_prostatex2_dicom.py)).
+Series-description regexes broaden across three scanner families to catch all naming variants ([`scripts/dataprep/preprocess_prostatex2_dicom.py`](scripts/dataprep/preprocess_prostatex2_dicom.py)).
 
 **Lesion masks.** QIICR DICOM SEG annotations were swapped for Cuocolo et al.'s lesion ROI NIfTI masks because the QIICR set provides only whole-gland and zonal masks, not lesion-level masks. The Cuocolo glob handles all four orientation variants (`t2_tse_tra_ROI`, `t2_tse_tra0_ROI`, coronal, sagittal). When a patient has multiple lesions, masks are OR-ed into a single binary lesion-presence map. Patients with empty lesion masks are kept (with all-zero `y`) to avoid biasing the cohort toward lesion-positive cases.
 
@@ -420,7 +420,7 @@ All three gates pass on Qwen and LLaVA at fold 1.
 
 ### 6.10 Evaluation metrics
 
-Primary and secondary metrics ([`src/adversarial_reasoning/metrics/`](src/adversarial_reasoning/metrics/), [`scripts/build_stats_table.py`](scripts/build_stats_table.py)):
+Primary and secondary metrics ([`src/adversarial_reasoning/metrics/`](src/adversarial_reasoning/metrics/), [`scripts/diagnostics/build_stats_table.py`](scripts/diagnostics/build_stats_table.py)):
 
 | Metric | Definition | Source |
 |---|---|---|
@@ -429,7 +429,7 @@ Primary and secondary metrics ([`src/adversarial_reasoning/metrics/`](src/advers
 | **`<mode>_loss_final`** | Final adversarial loss at attack termination | attack-side telemetry |
 | **`<mode>_steps`** | Iteration count at attack termination | attack-side telemetry |
 
-Aggregation pipeline ([`scripts/build_stats_table.py:3-100`](scripts/build_stats_table.py)):
+Aggregation pipeline ([`scripts/diagnostics/build_stats_table.py:3-100`](scripts/diagnostics/build_stats_table.py)):
 
 1. Load all records from `runs/main/<mode>/<fold>/records.jsonl` for every (mode, fold).
 2. **Baseline.** Compute the noise-baseline mean of `edit_distance_norm` per pair-key `(model_key, task_id, sample_id, seed)` across all noise epsilons.
@@ -450,7 +450,7 @@ Tables ([`paper/tables/`](paper/tables/)):
 
 Figures ([`paper/figures/`](paper/figures/)):
 
-- `fig_trajectory_length_before_after.{png,csv}` — fold-averaged benign-vs-attacked trajectory length comparison ([`scripts/plot_trajectory_length_before_after.py`](scripts/plot_trajectory_length_before_after.py)).
+- `fig_trajectory_length_before_after.{png,csv}` — fold-averaged benign-vs-attacked trajectory length comparison ([`scripts/diagnostics/plot_trajectory_length.py`](scripts/diagnostics/plot_trajectory_length.py)).
 - `paper/fig4_cross_model.png` — Qwen vs LLaVA edit-distance bars at matched ε.
 - `paper/fig5_attack_landscape.png` — per-ε grouped bars + per-sample dots across all five attacks.
 - `attack_comparison/` — pairwise attack head-to-head plots, including targeted_hit rate.
@@ -473,10 +473,10 @@ python -m adversarial_reasoning.gates.e2e_probe
 HF_TOKEN=hf_xxx ./scripts/run_full_attack_pipeline.sh
 
 # 3. tables and figures
-python scripts/build_stats_table.py --runs-root runs/main \
+python scripts/diagnostics/build_stats_table.py --runs-root runs/main \
        --out paper/tables/main_benchmark.tex
-python scripts/plot_trajectory_length_before_after.py
-python scripts/compare_attacks.py
+python scripts/diagnostics/plot_trajectory_length.py
+python scripts/compare/attacks.py
 ```
 
 All randomness funnels through `torch.manual_seed(seed)` + `numpy.random.seed(seed)` at the start of each `(seed, sample)` cell. Records are JSONL append-only; the schema is implicitly versioned by field set. Manifest pins `random_seed=42` for the patient split. ε grid, attack hyperparameters, model snapshots, and tokenizer versions are pinned in [`configs/`](configs/) and the corresponding `requirements.txt` ([`docs/reproducibility.md`](docs/reproducibility.md)).

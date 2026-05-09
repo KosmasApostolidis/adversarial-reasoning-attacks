@@ -16,7 +16,7 @@ Do ε-bounded pixel-space adversarial perturbations on medical images induce sys
 
 ## Primary dataset
 
-**ProstateX** (public, TCIA) — prostate MRI (T2 / DWI / ADC), bi-parametric subset with PI-RADS labels, 3-fold cross-validation split (163 patients). **ProstateX-2** (TCIA, DICOM) is fetched and preprocessed separately via `scripts/fetch_prostatex2_tcia.py` + `scripts/preprocess_prostatex2_dicom.py`. Cross-domain secondary: VQA-RAD, SLAKE.
+**ProstateX** (public, TCIA) — prostate MRI (T2 / DWI / ADC), bi-parametric subset with PI-RADS labels, 3-fold cross-validation split (163 patients). **ProstateX-2** (TCIA, DICOM) is fetched and preprocessed separately via `scripts/dataprep/fetch_prostatex2_tcia.py` + `scripts/dataprep/preprocess_prostatex2_dicom.py`. Cross-domain secondary: VQA-RAD, SLAKE.
 
 ## Attack suite
 

@@ -7,6 +7,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Refactored — `scripts/` taxonomy + shared figure helpers (no logic changes)
+- **Deleted dead `scripts/_cli.py`** (1-line stub, zero callers).
+- **Hoisted byte-identical helpers into `scripts/_plotlib.py`**: `edits`,
+  `cot_drifts`, `has_cot`, `step1_flip_rate`, `bootstrap_ci` (previously
+  duplicated across `hero/_common.py` and `attack_landscape/_common.py`).
+  Old call sites still work via re-exports from each `_common.py`. The
+  `attack_landscape._common.flip_rate` legacy alias is preserved as
+  `flip_rate = step1_flip_rate`.
+- **New `scripts/_theme.py`** consolidates byte-identical theme constants
+  (`SHORT` short-name dict, `DARK_BG`, `DARK_AX`, `DARK_FG`). Family-specific
+  palettes (`C_BENIGN`/`C_NOISE`/`C_PGD`/...) intentionally diverge between
+  figure styles and stay local.
+- **Regrouped loose top-level scripts** into purpose-named subpackages:
+  - `scripts/diagnostics/` — `cot_null_distribution.py`,
+    `cot_confusion_matrix.py`, `build_stats_table.py`,
+    `plot_trajectory_length.py` (renamed from `plot_trajectory_length_before_after.py`).
+  - `scripts/dataprep/` — `backfill_cot_metrics.py`,
+    `fetch_prostatex_cuocolo_cohort.py`, `fetch_prostatex2_tcia.py`,
+    `preprocess_prostatex2_dicom.py`, plus the nested
+    `preprocess_prostatex2/` subpackage.
+  - `scripts/compare/` — `attacks.py` (was `compare_attacks.py`),
+    `models.py` (was `compare_models.py`).
+  - `scripts/make/` — all 8 `make_*.py` figure dispatchers, with the
+    redundant `make_` prefix dropped (e.g. `make_hero_figures.py` →
+    `make/hero_figures.py`).
+- **`scripts/cli.py`** `SUBCOMMANDS` updated to point at the new
+  `scripts.make.*` paths. The 3 console-script entry points (`adreason`,
+  `adreason-figures`, `adreason-compare`) keep their public names;
+  `adreason-compare` repointed to `scripts.compare.attacks:main`.
+- **`scripts/make/*` absolute imports**: bare imports like
+  `from hero import ...` were replaced with `from scripts.hero import ...`
+  so dispatchers resolve from any invocation context.
+
 ### Added — CoT-Aware Adversarial Evaluation v1 (schema 0.4.0)
 - **Records schema bump 0.3.x → 0.4.0**: `runner/records.py` now
   emits `reasoning_trace` (raw per-step CoT, includes inline tool-call
