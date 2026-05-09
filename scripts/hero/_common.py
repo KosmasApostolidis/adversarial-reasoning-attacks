@@ -78,6 +78,56 @@ def edits(recs):
     return np.array([r["edit_distance_norm"] for r in recs], dtype=np.float64)
 
 
+def cot_drifts(recs):
+    """Per-record cot_drift_score; NaN where the field is absent."""
+    out = []
+    for r in recs:
+        v = r.get("cot_drift_score")
+        out.append(float(v) if v is not None else np.nan)
+    return np.array(out, dtype=np.float64)
+
+
+def faith_drops(recs):
+    """Benign minus attacked faithfulness, per record. NaN if either is absent."""
+    out = []
+    for r in recs:
+        b = r.get("cot_faithfulness_benign")
+        a = r.get("cot_faithfulness_attacked")
+        out.append(float(b) - float(a) if (b is not None and a is not None) else np.nan)
+    return np.array(out, dtype=np.float64)
+
+
+def hall_deltas(recs):
+    """Attacked minus benign hallucination rate. NaN if either is absent."""
+    out = []
+    for r in recs:
+        b = r.get("cot_hallucination_benign")
+        a = r.get("cot_hallucination_attacked")
+        out.append(float(a) - float(b) if (b is not None and a is not None) else np.nan)
+    return np.array(out, dtype=np.float64)
+
+
+def refusal_rates(recs):
+    """(benign_rate, attacked_rate) over the record list. None if absent."""
+    bs = [r.get("cot_refusal_benign") for r in recs if r.get("cot_refusal_benign") is not None]
+    as_ = [r.get("cot_refusal_attacked") for r in recs if r.get("cot_refusal_attacked") is not None]
+    if not bs and not as_:
+        return (None, None)
+    return (
+        float(np.mean(bs)) if bs else None,
+        float(np.mean(as_)) if as_ else None,
+    )
+
+
+def has_cot(by_attack: dict[str, list[dict]]) -> bool:
+    """Returns True iff at least one record across all attacks carries
+    cot_drift_score. Lets figure dispatchers skip CoT panels gracefully
+    when records are pre-v0.4.0."""
+    return any(
+        any("cot_drift_score" in r for r in recs) for recs in by_attack.values()
+    )
+
+
 def bootstrap_ci(values, n_boot=2000, alpha=0.05, seed=0):
     if values.size == 0:
         return (0.0, 0.0)

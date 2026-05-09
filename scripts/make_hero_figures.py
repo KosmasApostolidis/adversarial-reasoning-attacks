@@ -12,8 +12,17 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from hero import fig_beeswarm, fig_bento, fig_heatmap, fig_radial, fig_ridgeline
-from hero._common import ATTACK_ORDER, edits, gather, step1_flip_rate
+from hero import (
+    fig_beeswarm,
+    fig_bento,
+    fig_cot_overlay,
+    fig_heatmap,
+    fig_heatmap_drift,
+    fig_heatmap_faith,
+    fig_radial,
+    fig_ridgeline,
+)
+from hero._common import ATTACK_ORDER, edits, gather, has_cot, step1_flip_rate
 
 
 def main() -> int:
@@ -28,7 +37,14 @@ def main() -> int:
     fig_radial(by_attack, out_dir / "fig4_radial_profile.png")
     fig_bento(by_attack, out_dir / "fig5_bento.png")
 
-    print(f"[make_hero_figures] wrote 5 figures → {out_dir}")
+    n_extra = 0
+    if has_cot(by_attack):
+        fig_cot_overlay(by_attack, out_dir / "fig6_cot_overlay.png")
+        fig_heatmap_drift(by_attack, out_dir / "fig3b_heatmap_drift.png")
+        fig_heatmap_faith(by_attack, out_dir / "fig3c_heatmap_faith.png")
+        n_extra = 3
+
+    print(f"[make_hero_figures] wrote {5 + n_extra} figures → {out_dir}")
     for name in ATTACK_ORDER:
         eds = edits(by_attack[name])
         print(

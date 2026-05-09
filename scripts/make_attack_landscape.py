@@ -13,13 +13,14 @@ from __future__ import annotations
 from pathlib import Path
 
 from attack_landscape import (
+    fig_cot_axis,
     fig_eps_curves,
     fig_landscape_overview,
     fig_radar,
     fig_tool_substitution,
     fig_violin_grid,
 )
-from attack_landscape._common import edits, flip_rate, load_records
+from attack_landscape._common import edits, flip_rate, has_cot, load_records
 
 
 def main() -> int:
@@ -41,7 +42,12 @@ def main() -> int:
     fig_tool_substitution(by_attack, out_dir / "fig4_tool_substitution.png")
     fig_violin_grid(by_attack, out_dir / "fig5_violin_grid.png")
 
-    print(f"[make_attack_landscape] wrote 5 figures → {out_dir}")
+    n_extra = 0
+    if has_cot(by_attack):
+        fig_cot_axis(by_attack, out_dir / "fig6_cot_axis.png")
+        n_extra = 1
+
+    print(f"[make_attack_landscape] wrote {5 + n_extra} figures → {out_dir}")
     for name, recs in by_attack.items():
         eds = edits(recs)
         print(f"  {name:18s} n={eds.size:3d}  μ={eds.mean():.3f}  flip={flip_rate(recs):.0%}")

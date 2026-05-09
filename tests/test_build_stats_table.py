@@ -231,3 +231,157 @@ def test_build_stats_table_aborts_when_no_noise_records(tmp_path: Path) -> None:
     _write_jsonl(runs_dir / "pgd" / "records.jsonl", [])
     rc = bst.build_stats_table(runs_dir, tmp_path / "x.tex", n_resamples=50)
     assert rc == 1
+
+
+# -------- CoT extension --------
+
+
+def _cot_record(
+    *,
+    sample_id: str,
+    seed: int,
+    drift: float | None = 0.0,
+    faith_b: float | None = 0.9,
+    faith_a: float | None = 0.5,
+    halluc_b: float | None = 0.0,
+    halluc_a: float | None = 0.4,
+    refusal_b: bool | None = False,
+    refusal_a: bool | None = True,
+) -> dict:
+    rec = _record(
+        model_key="qwen2_5_vl_7b",
+        task_id="prostate_mri_workup",
+        attack_mode="pgd",
+        attack_name="pgd_linf",
+        epsilon=0.0157,
+        seed=seed,
+        sample_id=sample_id,
+        edit_distance=0.4,
+    )
+    if drift is not None:
+        rec["cot_drift_score"] = drift
+    if faith_b is not None:
+        rec["cot_faithfulness_benign"] = faith_b
+    if faith_a is not None:
+        rec["cot_faithfulness_attacked"] = faith_a
+    if halluc_b is not None:
+        rec["cot_hallucination_benign"] = halluc_b
+    if halluc_a is not None:
+        rec["cot_hallucination_attacked"] = halluc_a
+    if refusal_b is not None:
+        rec["cot_refusal_benign"] = refusal_b
+    if refusal_a is not None:
+        rec["cot_refusal_attacked"] = refusal_a
+    return rec
+
+
+def test_extract_drift_pairs_zero_with_score() -> None:
+    assert bst._extract_drift({"cot_drift_score": 0.42}) == (0.0, 0.42)
+    assert bst._extract_drift({"cot_drift_score": None}) is None
+    assert bst._extract_drift({}) is None
+
+
+def test_extract_faith_requires_both_sides() -> None:
+    assert bst._extract_faith(
+        {"cot_faithfulness_benign": 0.8, "cot_faithfulness_attacked": 0.3}
+    ) == (0.8, 0.3)
+    assert bst._extract_faith({"cot_faithfulness_benign": 0.8}) is None
+
+
+def test_extract_refusal_coerces_bool_to_float() -> None:
+    pair = bst._extract_refusal({"cot_refusal_benign": False, "cot_refusal_attacked": True})
+    assert pair == (0.0, 1.0)
+
+
+def test_build_cells_for_metric_skips_records_missing_metric() -> None:
+    rows = [
+        _cot_record(sample_id="s00", seed=0, drift=0.5),
+        _cot_record(sample_id="s01", seed=0, drift=None),  # skipped
+        _cot_record(sample_id="s02", seed=1, drift=0.7),
+    ]
+    cells = bst._build_cells_for_metric(rows, bst._extract_drift)
+    # All three records share the same cell; only the two with drift land.
+    only_cell = next(iter(cells.values()))
+    assert only_cell["benign"] == [0.0, 0.0]
+    assert only_cell["attacked"] == [0.5, 0.7]
+
+
+def test_build_cot_table_emits_eight_column_table(tmp_path: Path) -> None:
+    runs_dir = tmp_path / "runs"
+    rows: list[dict] = []
+    for seed in range(5):
+        for i in range(6):
+            rows.append(_cot_record(sample_id=f"s{i:02d}", seed=seed))
+    _write_jsonl(runs_dir / "pgd" / "records.jsonl", rows)
+    out_path = tmp_path / "paper" / "tables" / "cot_benchmark.tex"
+    rc = bst.build_cot_table(runs_dir, out_path, n_resamples=100, ci_level=0.95, q=0.05)
+    assert rc == 0
+    content = out_path.read_text(encoding="utf-8")
+    assert "\\begin{tabular}{llllllll}" in content
+    assert "median CoT-drift" in content
+    assert "$\\Delta$faith" in content
+    assert "$\\Delta$hall" in content
+    assert "refusal rate" in content
+    # Refusal rate column rendered as "100.0\%" since attacked_a=True every row.
+    assert "100.0\\%" in content
+
+
+def test_build_cot_table_skips_when_no_cot_fields(tmp_path: Path) -> None:
+    runs_dir = tmp_path / "runs"
+    plain_rows: list[dict] = []
+    for seed in range(3):
+        for i in range(4):
+            plain_rows.append(
+                _record(
+                    model_key="m",
+                    task_id="t",
+                    attack_mode="pgd",
+                    attack_name="pgd_linf",
+                    epsilon=0.0157,
+                    seed=seed,
+                    sample_id=f"s{i}",
+                    edit_distance=0.3,
+                )
+            )
+    _write_jsonl(runs_dir / "pgd" / "records.jsonl", plain_rows)
+    rc = bst.build_cot_table(runs_dir, tmp_path / "x.tex", n_resamples=50)
+    assert rc == 1, "must signal skip when records lack CoT metrics"
+
+
+def test_main_with_cot_out_writes_both_tables(tmp_path: Path) -> None:
+    runs_dir = tmp_path / "runs"
+    # Need both noise + pgd legs for the main table; pgd records carry CoT.
+    noise_rows: list[dict] = []
+    pgd_rows: list[dict] = []
+    for seed in range(5):
+        for i in range(6):
+            sid = f"s{i:02d}"
+            noise_rows.append(
+                _record(
+                    model_key="qwen2_5_vl_7b",
+                    task_id="prostate_mri_workup",
+                    attack_mode="noise",
+                    attack_name="pgd_linf",
+                    epsilon=0.0157,
+                    seed=seed,
+                    sample_id=sid,
+                    edit_distance=0.05,
+                )
+            )
+            pgd_rows.append(_cot_record(sample_id=sid, seed=seed))
+    _write_jsonl(runs_dir / "noise" / "records.jsonl", noise_rows)
+    _write_jsonl(runs_dir / "pgd" / "records.jsonl", pgd_rows)
+    main_out = tmp_path / "main.tex"
+    cot_out = tmp_path / "cot.tex"
+    rc = bst.main(
+        [
+            "--runs-dir", str(runs_dir),
+            "--out", str(main_out),
+            "--cot-out", str(cot_out),
+            "--n-resamples", "100",
+        ]
+    )
+    assert rc == 0
+    assert main_out.exists()
+    assert cot_out.exists()
+    assert "$\\Delta$faith" in cot_out.read_text(encoding="utf-8")

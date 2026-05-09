@@ -440,6 +440,33 @@ the intended config surface. At a minimum you will need:
 
 ## 4. Phase-4 — paper artifacts
 
+### 4.0 CoT-metrics backfill (v0.4 schema)  ⓘ optional but required for CoT figures
+
+Phase-2 sweeps captured `reasoning_trace` per pair (v0.4+ runner) but
+do not score it. Backfill the four CoT metrics (drift, faithfulness,
+hallucination, refusal) before §4.1 / §4.2 so the CoT panels and the
+sibling stats table can be regenerated:
+
+```bash
+# Pin the HF revision for reproducibility (one-time):
+huggingface-cli download cross-encoder/nli-deberta-v3-large \
+    --revision main --quiet | head -1   # writes the resolved SHA path
+# Capture the SHA the model currently resolves to:
+HF_HUB_REVISION="$(huggingface-cli scan-cache | grep nli-deberta-v3-large | awk '{print $2}')"
+echo "${HF_HUB_REVISION}" > runs/main/_nli_revision.txt
+export NLI_MODEL_REVISION="${HF_HUB_REVISION}"
+
+# Backfill each leg in place (idempotent — safe to re-run):
+for mode in noise pgd apgd trajectory_drift targeted_tool; do
+    python scripts/backfill_cot_metrics.py \
+        --in  runs/main/${mode}/records.jsonl \
+        --out runs/main/${mode}/records_cot.jsonl
+done
+```
+
+Pre-v0.4 sweeps that lack `reasoning_trace` are skipped silently —
+re-run the affected legs through §2 with the v0.4 runner to recapture.
+
 ### 4.1 Stats table  ⚠ blocker — `scripts/build_stats_table.py` does not exist
 
 This is a hard prerequisite for the paper main result table. Build the
@@ -465,12 +492,16 @@ Once built, run:
 ```bash
 python scripts/build_stats_table.py \
     --runs-dir runs/main \
-    --out paper/tables/main_benchmark.tex
+    --out paper/tables/main_benchmark.tex \
+    --cot-out paper/tables/cot_benchmark.tex   # optional CoT sibling table
 ```
 
 Expected output: a single `.tex` file ~3–5 KB with one row per
 `(model, task, attack, ε)` cell flagging q-values below 0.05 with `*`
-and reporting median Δ-edit-distance with [CI low, CI high].
+and reporting median Δ-edit-distance with [CI low, CI high]. With
+`--cot-out`, a sibling `cot_benchmark.tex` is emitted carrying four
+extra columns (CoT-drift, Δfaith, Δhalluc, refusal-rate-attacked) —
+soft-skipped if the records lack CoT fields (run §4.0 first).
 
 ### 4.2 Figures  ⚠ blocker — figure scripts read Phase-1 paths
 
@@ -557,6 +588,30 @@ adreason-figures attack-landscape  # paper/figures/attack_landscape/*.png
 dispatches to `scripts/cli.py`. Other useful subcommands:
 `comprehensive`, `reasoning-flow`, `graph`, `compare`, `figures`.
 
+### 4.4 CoT sanity figures  ⓘ skip if §4.0 was skipped
+
+Two stand-alone figures that ground the CoT-drift signal: one shows
+the drift floor between reseeds of the same benign run (a null
+distribution), and one cross-tabulates tool-sequence flips against
+CoT drift (the silent-corruption quadrant). Both read the
+CoT-enriched records produced by §4.0:
+
+```bash
+python scripts/cot_null_distribution.py \
+    --records runs/main/pgd/records_cot.jsonl \
+    --out paper/figures/sanity/null_distribution.png
+
+python scripts/cot_confusion_matrix.py \
+    --records runs/main/pgd/records_cot.jsonl \
+    --out paper/figures/sanity/cot_confusion.png \
+    --threshold 0.3        # or set from null_distribution 95%ile
+```
+
+The null-distribution panel additionally consumes ≥2 reseeds per
+`(model, task, sample)` cell of `attack_name == "null"` /
+`epsilon == 0.0` rows — produced by re-running the runner with
+`--null-reseeds 5` (cheap; benign-only, no gradient).
+
 ### 4.3 LaTeX manuscript
 
 `paper/main.tex` does not yet exist. ≈ 1–2 weeks of writing once §4.1
@@ -630,6 +685,10 @@ mtime. Each entry lists the section that produces it.
 | Yes      | Commit pin                     | `runs/main/_commit.txt`                                     | §5.2   |
 | Yes      | Pip freeze                     | `runs/main/_pip_freeze.txt`                                 | §5.3   |
 | Yes      | Stats table                    | `paper/tables/main_benchmark.tex`                           | §4.1   |
+| Optional | CoT stats table                | `paper/tables/cot_benchmark.tex`                            | §4.1 (with `--cot-out`) |
+| Optional | CoT-enriched records           | `runs/main/<mode>/records_cot.jsonl`                        | §4.0   |
+| Optional | NLI revision pin               | `runs/main/_nli_revision.txt`                               | §4.0   |
+| Optional | CoT sanity figures             | `paper/figures/sanity/{null_distribution,cot_confusion}.png`| §4.4   |
 | Yes      | Main figures                   | `paper/figures/paper/fig{1..5}_*.png`                       | §4.2   |
 | Yes      | Hero / landscape figures       | `paper/figures/{hero,attack_landscape}/*.png`               | §4.2   |
 | Yes      | Quality-gate proof             | `make test && make lint` final exit 0                       | §0.6 / §2.6 |
