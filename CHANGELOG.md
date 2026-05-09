@@ -7,6 +7,58 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — CoT-Aware Adversarial Evaluation v1 (schema 0.4.0)
+- **Records schema bump 0.3.x → 0.4.0**: `runner/records.py` now
+  emits `reasoning_trace` (raw per-step CoT, includes inline tool-call
+  JSON) and an optional `cot_metrics` block on each pair record:
+  `cot_drift_score`, `cot_faithfulness_{benign,attacked}`,
+  `cot_hallucination_{benign,attacked}`, `cot_refusal_{benign,attacked}`,
+  plus raw refusal probabilities. Backward compatible — legacy
+  records without these fields skip CoT figures and the CoT stats
+  table cleanly.
+- **`metrics/nli.py`** — eager DeBERTa-v3-large-MNLI loader.
+  `NLI_MODEL_REVISION` constant (env-overridable) pins the HF
+  revision SHA for paper reproducibility.
+- **`metrics/cot.py`** — five pure-NLI scoring functions:
+  `clean_cot`, `cot_drift_score`, `cot_faithfulness`,
+  `cot_hallucination`, `cot_refusal`, plus a `score_pair` convenience
+  wrapper that returns the 9-key CoT metric dict consumed by
+  `pair_record(cot_metrics=...)`.
+- **`scripts/backfill_cot_metrics.py`** — idempotent enrichment of
+  legacy `records.jsonl` to v0.4.0 (skips rows missing
+  `reasoning_trace`, skips rows already scored). Produces
+  `records_cot.jsonl` for the figure / table pipeline.
+- **CoT figure outputs** — additive only. New panels fire only when
+  records carry CoT fields (`scripts/hero/_common.has_cot`):
+  - `paper/figures/hero/{cot_overlay,heatmap_drift,heatmap_faith}.png`
+  - `paper/figures/attack_landscape/fig6_cot_axis.png`
+  - `paper/figures/sanity/{null_distribution,cot_confusion}.png`
+- **Sanity scripts** — `scripts/cot_null_distribution.py` (5-reseed
+  pairwise drift floor) and `scripts/cot_confusion_matrix.py`
+  (silent-corruption quadrant: tool-flip × CoT-drift).
+- **Stats table extension** — `scripts/build_stats_table.py` gains a
+  `--cot-out` flag that emits a sibling 8-column LaTeX table
+  (CoT-drift, Δfaithfulness, Δhallucination, refusal-rate-attacked)
+  with bootstrap CI + Wilcoxon + BH at q=0.05. Existing 5-column
+  `main_benchmark.tex` byte-identical when CoT fields absent.
+- Tests: 7 new in `tests/test_build_stats_table.py`, 13 in
+  `tests/test_cot_sanity_scripts.py`, 28 in `tests/test_cot_metrics.py`,
+  6 in `tests/test_backfill_cot_metrics.py`. Full suite 379 / 379;
+  coverage 96.83%.
+
+### Notes — v0.4.0 migration
+- The schema bump is additive: existing records.jsonl files load
+  unchanged. Run `scripts/backfill_cot_metrics.py --in <legacy.jsonl>
+  --out records_cot.jsonl` once to enrich a Phase-2 sweep without
+  re-running attacks. Legacy records lacking `reasoning_trace`
+  (pre-v0.4 sweeps) are skipped silently — recapture by re-running
+  the affected legs with the v0.4 runner.
+- Out of scope for v1: text-injection attacks, system-prompt attacks,
+  cross-vector attacks, hidden-thinking VLMs, span-level alluvial
+  CoT-tool alignment, API-judge calibration, and CoT scoring for
+  Ollama / InternVL2 / LLaVA-13B (none currently flow through the
+  gradient attack loop). Each gets its own follow-up sub-project.
+
 ### Added
 - `runner.cli` `--dry-run` flag — resolves config through the loader +
   schema, prints `RunnerConfig.__repr__()`, exits before any model load.

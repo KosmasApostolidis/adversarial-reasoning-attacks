@@ -8,7 +8,13 @@ weights on first run, and pins the model to ``model.train(False)`` /
 Public API
 ----------
 NLI_MODEL_ID : str
-    Pinned HF model identifier. Revision pin lives in ``requirements.lock``.
+    Pinned HF model identifier.
+NLI_MODEL_REVISION : str
+    HF revision SHA / branch / tag. Override with the
+    ``NLI_MODEL_REVISION`` env var to pin a specific commit
+    (recommended for paper reproducibility — capture once via
+    ``huggingface-cli download cross-encoder/nli-deberta-v3-large``
+    and paste the resolved SHA into ``runs/main/_nli_revision.txt``).
 
 entailment_prob(premise: str, hypothesis: str) -> float
     Probability in [0, 1] that ``premise`` entails ``hypothesis``.
@@ -20,6 +26,8 @@ A real-model smoke test lives behind ``pytest -m slow``.
 
 from __future__ import annotations
 
+import os
+
 import torch
 from transformers import (
     AutoModelForSequenceClassification,
@@ -27,9 +35,12 @@ from transformers import (
 )
 
 NLI_MODEL_ID = "cross-encoder/nli-deberta-v3-large"
+NLI_MODEL_REVISION = os.environ.get("NLI_MODEL_REVISION", "main")
 
-_tokenizer = AutoTokenizer.from_pretrained(NLI_MODEL_ID)
-_model = AutoModelForSequenceClassification.from_pretrained(NLI_MODEL_ID)
+_tokenizer = AutoTokenizer.from_pretrained(NLI_MODEL_ID, revision=NLI_MODEL_REVISION)
+_model = AutoModelForSequenceClassification.from_pretrained(
+    NLI_MODEL_ID, revision=NLI_MODEL_REVISION
+)
 _model.train(False)  # inference mode (equivalent to .eval())
 _device = "cuda" if torch.cuda.is_available() else "cpu"
 _model = _model.to(_device)
