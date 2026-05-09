@@ -20,14 +20,14 @@ import runpy
 import sys
 
 SUBCOMMANDS: dict[str, str] = {
-    "hero": "scripts.make_hero_figures",
-    "comprehensive": "scripts.make_comprehensive_figures",
-    "paper": "scripts.make_paper_figures",
-    "attack-landscape": "scripts.make_attack_landscape",
-    "reasoning-flow": "scripts.make_reasoning_flow_figures",
-    "graph": "scripts.make_graph_figures",
-    "compare": "scripts.make_compare_figures",
-    "figures": "scripts.make_figures",
+    "hero": "scripts.make.hero_figures",
+    "comprehensive": "scripts.make.comprehensive_figures",
+    "paper": "scripts.make.paper_figures",
+    "attack-landscape": "scripts.make.attack_landscape",
+    "reasoning-flow": "scripts.make.reasoning_flow_figures",
+    "graph": "scripts.make.graph_figures",
+    "compare": "scripts.make.compare_figures",
+    "figures": "scripts.make.figures",
 }
 
 

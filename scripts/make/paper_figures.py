@@ -10,14 +10,14 @@ Outputs (all in paper/figures/paper/):
 
 from __future__ import annotations
 
-from paper_figures import (
+from scripts.paper_figures import (
     fig1_main_result,
     fig2_trajectories,
     fig3_tool_heatmap,
     fig4_cross_model,
     fig5_attack_landscape,
 )
-from paper_figures._common import OUT
+from scripts.paper_figures._common import OUT
 
 
 def main() -> int:

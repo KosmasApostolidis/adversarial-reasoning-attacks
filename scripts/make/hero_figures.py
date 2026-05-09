@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from hero import (
+from scripts.hero import (
     fig_beeswarm,
     fig_bento,
     fig_cot_overlay,
@@ -22,7 +22,7 @@ from hero import (
     fig_radial,
     fig_ridgeline,
 )
-from hero._common import ATTACK_ORDER, edits, gather, has_cot, step1_flip_rate
+from scripts.hero._common import ATTACK_ORDER, edits, gather, has_cot, step1_flip_rate
 
 
 def main() -> int:

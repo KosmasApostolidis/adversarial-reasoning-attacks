@@ -16,7 +16,7 @@ Graph / reasoning-flow (dark background, visually striking):
 
 from __future__ import annotations
 
-from comprehensive import (
+from scripts.comprehensive import (
     graph6_bipartite,
     graph7_divergence,
     graph8_tool_influence,
@@ -27,7 +27,7 @@ from comprehensive import (
     stat3_trajectory_lengths,
     stat4_step_heatmap,
 )
-from comprehensive._common import GRAPH_OUT, STAT_OUT
+from scripts.comprehensive._common import GRAPH_OUT, STAT_OUT
 
 
 def main() -> int:

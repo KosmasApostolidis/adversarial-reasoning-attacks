@@ -9,14 +9,14 @@ graph15_multi_condition.png   — all 3 conditions (benign/noise/PGD) in one ste
 
 from __future__ import annotations
 
-from reasoning_flow import (
+from scripts.reasoning_flow import (
     graph11_reasoning_paths,
     graph12_alluvial,
     graph13_transition_delta,
     graph14_reasoning_strips,
     graph15_multi_condition,
 )
-from reasoning_flow._common import OUT
+from scripts.reasoning_flow._common import OUT
 
 
 def main() -> int:

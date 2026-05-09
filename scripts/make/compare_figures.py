@@ -7,7 +7,8 @@ from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
-from _plotlib import load_records as _load
+
+from scripts._plotlib import load_records as _load
 
 
 def main() -> int:
