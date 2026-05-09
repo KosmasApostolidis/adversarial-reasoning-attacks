@@ -15,6 +15,7 @@ if str(_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS))
 
 from _plotlib import load_records as _load  # noqa: E402
+from _theme import SHORT  # noqa: E402
 
 mpl.rcParams.update(
     {
@@ -39,16 +40,6 @@ C_BENIGN = "#58a6ff"  # blue
 C_NOISE = "#3fb950"  # green
 C_PGD = "#f85149"  # red
 C_NODE = "#e6edf3"
-
-SHORT = {
-    "lookup_pubmed": "PubMed",
-    "query_guidelines": "Guidelines",
-    "calculate_risk_score": "Risk Score",
-    "draft_report": "Draft Report",
-    "request_followup": "Followup",
-    "escalate_to_specialist": "Escalate",
-    "describe_region": "Describe",
-}
 
 OUT = Path("paper/figures/graphs")
 OUT.mkdir(parents=True, exist_ok=True)

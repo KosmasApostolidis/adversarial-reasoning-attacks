@@ -10,6 +10,7 @@ if str(_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS))
 
 from _plotlib import despine, load_records  # noqa: E402
+from _theme import DARK_AX, DARK_BG, DARK_FG, SHORT  # noqa: E402
 
 STAT_OUT = Path("paper/figures/stats")
 GRAPH_OUT = Path("paper/figures/graphs_v2")
@@ -21,20 +22,7 @@ C_NOISE = "#4dac26"
 C_PGD = "#d73027"
 C_LLAVA = "#f46d43"
 C_ACCENT = "#762a83"
-DARK_BG = "#0d1117"
-DARK_AX = "#161b22"
-DARK_FG = "#e6edf3"
-DARK_GRID = "#30363d"
-
-SHORT = {
-    "lookup_pubmed": "PubMed",
-    "query_guidelines": "Guidelines",
-    "calculate_risk_score": "Risk Score",
-    "draft_report": "Draft Report",
-    "request_followup": "Followup",
-    "escalate_to_specialist": "Escalate",
-    "describe_region": "Describe",
-}
+DARK_GRID = "#30363d"  # local: differs from reasoning_flow (#21262d)
 
 
 def _s(t: str) -> str:

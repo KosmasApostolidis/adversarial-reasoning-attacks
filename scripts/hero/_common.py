@@ -14,7 +14,14 @@ _SCRIPTS = Path(__file__).resolve().parent.parent
 if str(_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS))
 
-from _plotlib import load_records  # noqa: E402
+from _plotlib import (  # noqa: E402, F401
+    bootstrap_ci,
+    cot_drifts,
+    edits,
+    has_cot,
+    load_records,
+    step1_flip_rate,
+)
 
 # ── Theme ──────────────────────────────────────────────────────────────────
 BG = "#0B0F1A"
@@ -74,19 +81,6 @@ mpl.rcParams.update(
 )
 
 
-def edits(recs):
-    return np.array([r["edit_distance_norm"] for r in recs], dtype=np.float64)
-
-
-def cot_drifts(recs):
-    """Per-record cot_drift_score; NaN where the field is absent."""
-    out = []
-    for r in recs:
-        v = r.get("cot_drift_score")
-        out.append(float(v) if v is not None else np.nan)
-    return np.array(out, dtype=np.float64)
-
-
 def faith_drops(recs):
     """Benign minus attacked faithfulness, per record. NaN if either is absent."""
     out = []
@@ -117,36 +111,6 @@ def refusal_rates(recs):
         float(np.mean(bs)) if bs else None,
         float(np.mean(as_)) if as_ else None,
     )
-
-
-def has_cot(by_attack: dict[str, list[dict]]) -> bool:
-    """Returns True iff at least one record across all attacks carries
-    cot_drift_score. Lets figure dispatchers skip CoT panels gracefully
-    when records are pre-v0.4.0."""
-    return any(
-        any("cot_drift_score" in r for r in recs) for recs in by_attack.values()
-    )
-
-
-def bootstrap_ci(values, n_boot=2000, alpha=0.05, seed=0):
-    if values.size == 0:
-        return (0.0, 0.0)
-    rng = np.random.default_rng(seed)
-    boots = rng.choice(values, size=(n_boot, values.size), replace=True).mean(axis=1)
-    return tuple(np.quantile(boots, [alpha / 2, 1 - alpha / 2]))
-
-
-def step1_flip_rate(recs):
-    flips, total = 0, 0
-    for r in recs:
-        b = r.get("benign", {}).get("tool_sequence", []) or []
-        a = r.get("attacked", {}).get("tool_sequence", []) or []
-        if not b:
-            continue
-        total += 1
-        if not a or a[0] != b[0]:
-            flips += 1
-    return flips / total if total else 0.0
 
 
 def gather() -> dict[str, list[dict]]:

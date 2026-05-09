@@ -7,6 +7,11 @@ Replaces the per-script duplicates:
 - ``_despine``                                     → :func:`despine`
 - ``_panel`` / ``_panel_label``                    → :func:`panel_label`
 - ``make_palette`` / ``_tool_palette``             → :func:`tool_palette`
+- ``edits``                                        → :func:`edits`
+- ``cot_drifts``                                   → :func:`cot_drifts`
+- ``has_cot``                                      → :func:`has_cot`
+- ``flip_rate`` / ``step1_flip_rate``              → :func:`step1_flip_rate`
+- ``bootstrap_ci``                                 → :func:`bootstrap_ci`
 """
 
 from __future__ import annotations
@@ -18,6 +23,7 @@ from pathlib import Path
 from typing import Any
 
 import matplotlib.pyplot as plt
+import numpy as np
 
 logger = logging.getLogger(__name__)
 
@@ -96,3 +102,69 @@ def tool_palette(
     items = sorted(tools) if sort else list(tools)
     cmap = plt.get_cmap(cmap_name)
     return {t: cmap(i % 20) for i, t in enumerate(items)}
+
+
+def edits(recs: Iterable[dict]) -> np.ndarray:
+    """Per-record ``edit_distance_norm`` as a float64 array.
+
+    Hoisted from ``scripts/hero/_common.py`` and
+    ``scripts/attack_landscape/_common.py`` (identical bodies).
+    """
+    return np.array([r["edit_distance_norm"] for r in recs], dtype=np.float64)
+
+
+def cot_drifts(recs: Iterable[dict]) -> np.ndarray:
+    """Per-record ``cot_drift_score``; NaN where the field is absent."""
+    out: list[float] = []
+    for r in recs:
+        v = r.get("cot_drift_score")
+        out.append(float(v) if v is not None else float("nan"))
+    return np.array(out, dtype=np.float64)
+
+
+def has_cot(by_attack: dict[str, list[dict]]) -> bool:
+    """True iff at least one record across all attacks carries ``cot_drift_score``.
+
+    Lets figure dispatchers skip CoT panels gracefully when records pre-date
+    schema v0.4.0.
+    """
+    return any(any("cot_drift_score" in r for r in recs) for recs in by_attack.values())
+
+
+def step1_flip_rate(recs: list[dict]) -> float:
+    """Fraction of samples whose first attacked tool differs from first benign tool.
+
+    Hoisted from ``hero._common.step1_flip_rate`` and
+    ``attack_landscape._common.flip_rate`` (byte-identical bodies). Both legacy
+    names re-export this symbol from their package's ``_common.py``.
+    """
+    flips, total = 0, 0
+    for r in recs:
+        b = r.get("benign", {}).get("tool_sequence", []) or []
+        a = r.get("attacked", {}).get("tool_sequence", []) or []
+        if not b:
+            continue
+        total += 1
+        if not a or a[0] != b[0]:
+            flips += 1
+    return flips / total if total else 0.0
+
+
+def bootstrap_ci(
+    values: np.ndarray,
+    n_boot: int = 2000,
+    alpha: float = 0.05,
+    seed: int = 0,
+) -> tuple[float, float]:
+    """Percentile bootstrap CI for the mean of ``values``.
+
+    Returns ``(0.0, 0.0)`` for an empty input. Output is always cast to
+    Python ``float`` (canonicalizes the legacy ``hero._common`` variant which
+    returned numpy scalars).
+    """
+    if values.size == 0:
+        return (0.0, 0.0)
+    rng = np.random.default_rng(seed)
+    boots = rng.choice(values, size=(n_boot, values.size), replace=True).mean(axis=1)
+    lo, hi = np.quantile(boots, [alpha / 2, 1 - alpha / 2])
+    return float(lo), float(hi)
