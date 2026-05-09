@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from scripts.backfill_cot_metrics import CoT_FIELDS, backfill
+from scripts.dataprep.backfill_cot_metrics import CoT_FIELDS, backfill
 
 
 def _nli_stub(p: str, h: str) -> float:

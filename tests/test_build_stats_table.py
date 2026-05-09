@@ -1,4 +1,4 @@
-"""End-to-end tests for ``scripts/build_stats_table.py`` on synthetic JSONL."""
+"""End-to-end tests for ``scripts/diagnostics/build_stats_table.py`` on synthetic JSONL."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ import numpy as np
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-SCRIPT_PATH = REPO_ROOT / "scripts" / "build_stats_table.py"
+SCRIPT_PATH = REPO_ROOT / "scripts" / "diagnostics" / "build_stats_table.py"
 
 
 def _load_module():

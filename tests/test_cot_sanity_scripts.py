@@ -6,15 +6,8 @@ helpers that drive the figures.
 
 from __future__ import annotations
 
-import sys
-from pathlib import Path
-
-# Make scripts/ importable.
-ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "scripts"))
-
-from cot_confusion_matrix import _drift, _flip, confusion  # noqa: E402
-from cot_null_distribution import (  # noqa: E402
+from scripts.diagnostics.cot_confusion_matrix import _drift, _flip, confusion
+from scripts.diagnostics.cot_null_distribution import (
     _attack_drift_distribution,
     _drift_floor,
     _is_null_row,

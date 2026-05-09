@@ -27,7 +27,7 @@ from typing import Any
 import matplotlib.pyplot as plt
 
 # Allow ``from _plotlib import ...`` when invoked as a module-by-path.
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from _plotlib import despine, load_records, panel_label
 
 _FOLD_RE = re.compile(r"_f(\d)_")

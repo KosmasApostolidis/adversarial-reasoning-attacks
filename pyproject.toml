@@ -89,7 +89,7 @@ Homepage = "https://github.com/KosmasApostolidis/adversarial-reasoning-attacks"
 [project.scripts]
 adreason = "adversarial_reasoning.runner:main"
 adreason-figures = "scripts.cli:main"
-adreason-compare = "scripts.compare_attacks:main"
+adreason-compare = "scripts.compare.attacks:main"
 
 [tool.setuptools.packages.find]
 where = ["src", "."]
