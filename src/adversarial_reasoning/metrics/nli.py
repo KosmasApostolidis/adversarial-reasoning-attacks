@@ -1,99 +1,60 @@
-"""Lazy NLI judge for CoT scoring.
+"""Eager DeBERTa-v3-large-MNLI judge for CoT scoring.
 
-The NLI model is a 440M-parameter DeBERTa-v3-large fine-tuned on MNLI.
-We do not import torch or transformers at module load time — that would
-balloon CI cold-start cost on machines that never touch CoT metrics.
+Loads the 440M-parameter cross-encoder NLI model at module import time.
+Importing this module pulls in torch and transformers, downloads the
+weights on first run, and pins the model to ``model.train(False)`` /
+``no_grad`` for inference.
 
 Public API
 ----------
-get_nli() -> Callable[[str, str], float]
-    Returns a function ``entailment_prob(premise, hypothesis)`` that
-    yields a probability in [0, 1]. Loads the model on first call,
-    caches the resulting closure on subsequent calls.
+NLI_MODEL_ID : str
+    Pinned HF model identifier. Revision pin lives in ``requirements.lock``.
 
-set_nli(fn) -> None
-    Override the cached judge. Used in tests with a deterministic stub.
+entailment_prob(premise: str, hypothesis: str) -> float
+    Probability in [0, 1] that ``premise`` entails ``hypothesis``.
 
-reset_nli() -> None
-    Drop the cache. Mostly for tests.
-
-NLI_MODEL_ID
-    Pinned model identifier. Surface-level constant so the runbook can
-    cross-reference. Revision pin lives in ``requirements.lock``.
+The unit tests for ``metrics.cot`` pass their own deterministic stub
+into the metric functions, so they never need to import this module.
+A real-model smoke test lives behind ``pytest -m slow``.
 """
 
 from __future__ import annotations
 
-from collections.abc import Callable
-from functools import lru_cache
+import torch
+from transformers import (
+    AutoModelForSequenceClassification,
+    AutoTokenizer,
+)
 
 NLI_MODEL_ID = "cross-encoder/nli-deberta-v3-large"
 
-EntailmentFn = Callable[[str, str], float]
+_tokenizer = AutoTokenizer.from_pretrained(NLI_MODEL_ID)
+_model = AutoModelForSequenceClassification.from_pretrained(NLI_MODEL_ID)
+_model.train(False)  # inference mode (equivalent to .eval())
+_device = "cuda" if torch.cuda.is_available() else "cpu"
+_model = _model.to(_device)
 
-_OVERRIDE: EntailmentFn | None = None
-
-
-def set_nli(fn: EntailmentFn | None) -> None:
-    """Replace (or clear) the cached NLI callable. Test hook."""
-    global _OVERRIDE
-    _OVERRIDE = fn
-    clear = getattr(_build_real_nli, "cache_clear", None)
-    if clear is not None:
-        clear()
-
-
-def reset_nli() -> None:
-    """Drop the cached real-model loader and any test override."""
-    global _OVERRIDE
-    _OVERRIDE = None
-    clear = getattr(_build_real_nli, "cache_clear", None)
-    if clear is not None:
-        clear()
-
-
-def get_nli() -> EntailmentFn:
-    if _OVERRIDE is not None:
-        return _OVERRIDE
-    return _build_real_nli()
-
-
-@lru_cache(maxsize=1)
-def _build_real_nli() -> EntailmentFn:
-    """Construct the real DeBERTa NLI callable. Lazy: imports only here."""
-    import torch
-    from transformers import (
-        AutoModelForSequenceClassification,
-        AutoTokenizer,
+_label2id = {label.lower(): idx for label, idx in _model.config.label2id.items()}
+if "entailment" not in _label2id:
+    raise RuntimeError(
+        f"NLI model {NLI_MODEL_ID} has no 'entailment' label "
+        f"(found: {list(_label2id)})"
     )
+_ENTAIL_IDX = _label2id["entailment"]
 
-    tokenizer = AutoTokenizer.from_pretrained(NLI_MODEL_ID)
-    model = AutoModelForSequenceClassification.from_pretrained(NLI_MODEL_ID)
-    model.train(False)  # inference mode (equivalent to .eval())
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    model = model.to(device)
 
-    label2id = {label.lower(): idx for label, idx in model.config.label2id.items()}
-    if "entailment" not in label2id:
-        raise RuntimeError(
-            f"NLI model {NLI_MODEL_ID} has no 'entailment' label "
-            f"(found: {list(label2id)})"
-        )
-    entail_idx = label2id["entailment"]
-
-    @torch.no_grad()
-    def entailment_prob(premise: str, hypothesis: str) -> float:
-        if not premise.strip() or not hypothesis.strip():
-            return 0.0
-        inputs = tokenizer(
-            premise,
-            hypothesis,
-            return_tensors="pt",
-            truncation=True,
-            max_length=512,
-        ).to(device)
-        logits = model(**inputs).logits[0]
-        probs = torch.softmax(logits, dim=-1)
-        return float(probs[entail_idx].item())
-
-    return entailment_prob
+@torch.no_grad()
+def entailment_prob(premise: str, hypothesis: str) -> float:
+    """Return P(premise entails hypothesis) under DeBERTa-v3-large-MNLI."""
+    if not premise.strip() or not hypothesis.strip():
+        return 0.0
+    inputs = _tokenizer(
+        premise,
+        hypothesis,
+        return_tensors="pt",
+        truncation=True,
+        max_length=512,
+    ).to(_device)
+    logits = _model(**inputs).logits[0]
+    probs = torch.softmax(logits, dim=-1)
+    return float(probs[_ENTAIL_IDX].item())
