@@ -66,6 +66,22 @@ def edits(recs: Iterable[dict]) -> np.ndarray:
     return np.array([r["edit_distance_norm"] for r in recs], dtype=np.float64)
 
 
+def cot_drifts(recs: Iterable[dict]) -> np.ndarray:
+    """Per-record cot_drift_score; NaN where the field is absent."""
+    out = []
+    for r in recs:
+        v = r.get("cot_drift_score")
+        out.append(float(v) if v is not None else np.nan)
+    return np.array(out, dtype=np.float64)
+
+
+def has_cot(by_attack: dict[str, list[dict]]) -> bool:
+    for recs in by_attack.values():
+        if any("cot_drift_score" in r for r in recs):
+            return True
+    return False
+
+
 def flip_rate(recs: list[dict]) -> float:
     """Fraction of samples whose first attacked tool differs from first benign tool."""
     flips, total = 0, 0
@@ -95,8 +111,10 @@ __all__ = [
     "LABELS",
     "PALETTE",
     "bootstrap_ci",
+    "cot_drifts",
     "edits",
     "flip_rate",
+    "has_cot",
     "load_records",
     "loss_finals",
 ]
