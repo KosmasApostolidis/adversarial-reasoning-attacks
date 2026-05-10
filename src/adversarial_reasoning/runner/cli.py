@@ -202,6 +202,18 @@ def _process_sample(
     return n_written
 
 
+def _log_sample_error(
+    exc: Exception, *, model_key: str, task_id: str, sample_id: str, seed: int
+) -> None:
+    """Print structured ERROR line + traceback for one failed sample/seed."""
+    print(
+        f"[runner] ERROR {type(exc).__name__} model={model_key} "
+        f"task={task_id} sample={sample_id} seed={seed} — skipping",
+        file=sys.stderr,
+    )
+    traceback.print_exc()
+
+
 def _iterate_records(
     *,
     cfg: RunnerConfig,
@@ -241,12 +253,13 @@ def _iterate_records(
                         )
                     except Exception as exc:
                         n_errors += 1
-                        print(
-                            f"[runner] ERROR {type(exc).__name__} model={model_key} "
-                            f"task={task_id} sample={sample.sample_id} seed={seed} — skipping",
-                            file=sys.stderr,
+                        _log_sample_error(
+                            exc,
+                            model_key=model_key,
+                            task_id=task_id,
+                            sample_id=sample.sample_id,
+                            seed=seed,
                         )
-                        traceback.print_exc()
     return n_records, n_errors
 
 
