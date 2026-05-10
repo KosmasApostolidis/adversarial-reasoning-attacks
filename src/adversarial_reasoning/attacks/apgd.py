@@ -98,6 +98,16 @@ class APGDAttack(AttackBase):
         forward_kwargs: dict[str, Any] | None = None,
         **_ignored: Any,
     ) -> AttackResult:
+        """Run APGD-Linf and return the best-loss restart.
+
+        Intentionally not decomposed: the Croce-Hein 2020 adaptive-step
+        + heavy-ball momentum + warm-restart logic is kept as one
+        cohesive block to preserve byte-identical numeric output with
+        the published paper and the existing ``test_apgd.py`` fixtures
+        (292 LOC of pinned numerics). Splitting the inner loop into
+        helpers risks subtle iteration-order or floating-point shifts
+        that would silently break the regression suite.
+        """
         if not getattr(vlm, "supports_gradients", False):
             raise ValueError(f"VLM backend {vlm.__class__.__name__} does not support gradients.")
 
