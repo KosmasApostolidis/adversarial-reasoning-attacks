@@ -43,6 +43,14 @@ _APGD_P_FLOOR: float = 0.06
 # Strict step-over-step improvement tolerance for ρ_w success counting.
 _APGD_IMPROVEMENT_TOL: float = 1e-12
 
+# Checkpoint-condition tolerances (Croce & Hein 2020):
+#   _APGD_ETA_CONVERGED_RTOL — η has not been halved since last checkpoint.
+#   _APGD_LOSS_PROGRESS_TOL  — loss_best has not improved by this margin.
+#   _APGD_ETA_FLOOR          — minimum η; halving never goes below this.
+_APGD_ETA_CONVERGED_RTOL: float = 1e-12
+_APGD_LOSS_PROGRESS_TOL: float = 1e-9
+_APGD_ETA_FLOOR: float = 1e-8
+
 
 def _checkpoints(n_iter: int) -> list[int]:
     """Return APGD checkpoint iteration indices for ``n_iter`` total steps."""
@@ -189,12 +197,12 @@ class APGDAttack(AttackBase):
                         checkpoints[ckpt_idx - 1] if ckpt_idx > 0 else 0
                     )
                     cond1 = success_count < self.rho * window
-                    cond2 = math.isclose(eta, eta_at_last_ckpt, rel_tol=1e-12) and not (
-                        loss_best < loss_at_last_ckpt - 1e-9
-                    )
+                    cond2 = math.isclose(
+                        eta, eta_at_last_ckpt, rel_tol=_APGD_ETA_CONVERGED_RTOL
+                    ) and not (loss_best < loss_at_last_ckpt - _APGD_LOSS_PROGRESS_TOL)
                     if cond1 or cond2:
                         with torch.no_grad():
-                            eta = max(eta / 2.0, 1e-8)
+                            eta = max(eta / 2.0, _APGD_ETA_FLOOR)
                             delta_data = (x_best - x0).detach()
                             delta.copy_(delta_data)
                             delta.grad = None
