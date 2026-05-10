@@ -33,18 +33,30 @@ import torch
 from .base import AttackBase, AttackResult
 from .loss import TokenTargetLoss
 
+# Croce & Hein 2020, §3.2 — checkpoint schedule:
+#   p_0 = 0, p_1 = _APGD_P1_INIT,
+#   p_{j+1} = p_j + max(p_j - p_{j-1} - _APGD_P_DECAY, _APGD_P_FLOOR)
+_APGD_P1_INIT: float = 0.22
+_APGD_P_DECAY: float = 0.03
+_APGD_P_FLOOR: float = 0.06
+
+# Strict step-over-step improvement tolerance for ρ_w success counting.
+_APGD_IMPROVEMENT_TOL: float = 1e-12
+
 
 def _checkpoints(n_iter: int) -> list[int]:
     """Return APGD checkpoint iteration indices for ``n_iter`` total steps."""
-    p = [0.0, 0.22]
+    p = [0.0, _APGD_P1_INIT]
     while p[-1] < 1.0:
-        nxt = p[-1] + max(p[-1] - p[-2] - 0.03, 0.06)
+        nxt = p[-1] + max(p[-1] - p[-2] - _APGD_P_DECAY, _APGD_P_FLOOR)
         p.append(min(nxt, 1.0))
     pts = sorted({max(1, math.ceil(pj * n_iter)) for pj in p[1:]})
     return [c for c in pts if c <= n_iter]
 
 
-def _step_is_improvement(loss_val: float, loss_prev: float, tol: float = 1e-12) -> bool:
+def _step_is_improvement(
+    loss_val: float, loss_prev: float, tol: float = _APGD_IMPROVEMENT_TOL
+) -> bool:
     """Croce-Hein 2020 ρ_w semantics: strict step-over-step decrease.
 
     Returns True iff ``loss_val`` is finite and strictly less than the
