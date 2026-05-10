@@ -8,18 +8,25 @@ import sys
 import time
 import traceback
 from pathlib import Path
+from typing import IO, Any
 
 from ..agents.medical_agent import MedicalAgent
 from ..metrics.trajectory import trajectory_edit_distance
 from ..models.loader import load_hf_vlm
-from ..tasks.loader import load_task
+from ..tasks.loader import TaskSample, load_task
 from ..tools.registry import default_registry
 from .attacks import perturb, run_gradient_attack
-from .config import GRADIENT_MODES, _load_yaml, load_runner_config, resolve_epsilons
+from .config import (
+    GRADIENT_MODES,
+    RunnerConfig,
+    _load_yaml,
+    load_runner_config,
+    resolve_epsilons,
+)
 from .records import pair_record
 
 
-def main(argv: list[str] | None = None) -> int:
+def _build_arg_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(description="Adversarial reasoning runner")
     p.add_argument("--config", required=True, help="Experiment YAML (e.g. configs/smoke.yaml)")
     p.add_argument("--attacks-config", default="configs/attacks.yaml")
@@ -47,120 +54,186 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Resolve config, print RunnerConfig, exit before any model load.",
     )
-    args = p.parse_args(argv)
+    return p
 
-    cfg = load_runner_config(args.config)
-    if args.dry_run:
-        print(repr(cfg))
-        return 0
-    attacks_yaml = _load_yaml(args.attacks_config)
 
+def _resolve_records_path(args: argparse.Namespace, cfg: RunnerConfig) -> Path | None:
+    """Resolve output dir + records.jsonl. Returns None on overwrite conflict."""
     out_dir = Path(args.out) if args.out else cfg.output_dir
     out_dir.mkdir(parents=True, exist_ok=True)
     records_path = out_dir / "records.jsonl"
-
     if records_path.exists() and not args.overwrite:
         print(
             f"[runner] ERROR {records_path} exists. Pass --overwrite to replace, "
             f"or use a different --out directory.",
             file=sys.stderr,
         )
-        return 1
+        return None
+    return records_path
 
-    tools = default_registry()
+
+def _load_samples(cfg: RunnerConfig, task_id: str, args: argparse.Namespace) -> list[TaskSample]:
+    """Load task samples honouring per-task dataset_split overrides."""
+    t_override = cfg.task_overrides.get(task_id, {})
+    n_samples = int(t_override.get("dataset_split", {}).get(args.split, 0)) or None
+    return list(load_task(task_id, split=args.split, n=n_samples, synthetic=args.synthetic))
+
+
+def _run_one_attack(
+    *,
+    mode: str,
+    vlm: Any,
+    agent: MedicalAgent,
+    sample: TaskSample,
+    benign: Any,
+    attack_name: str,
+    epsilon: float,
+    seed: int,
+    args: argparse.Namespace,
+    model_key: str,
+    task_id: str,
+) -> dict[str, Any]:
+    """Run one (attack_name, eps) probe against ``sample`` and return its record dict."""
+    t_start = time.time()
+    if mode in GRADIENT_MODES:
+        attacked = run_gradient_attack(
+            mode=mode,
+            vlm=vlm,
+            agent=agent,
+            sample=sample,
+            benign=benign,
+            epsilon=epsilon,
+            steps=args.pgd_steps,
+            seed=seed,
+            max_steps=args.max_steps,
+            task_id=task_id,
+            target_tool=args.target_tool,
+            target_step_k=args.target_step_k,
+        )
+    else:
+        adv_img = perturb(mode, sample.image, epsilon, seed)
+        attacked = agent.run(
+            task_id=task_id,
+            image=adv_img,
+            prompt=sample.prompt,
+            seed=seed,
+            max_steps=args.max_steps,
+        )
+    ed = trajectory_edit_distance(benign.tool_sequence(), attacked.tool_sequence(), normalize=True)
+    return pair_record(
+        model_key=model_key,
+        task_id=task_id,
+        sample_id=sample.sample_id,
+        attack_name=attack_name,
+        attack_mode=mode,
+        epsilon=epsilon,
+        seed=seed,
+        benign=benign,
+        attacked=attacked,
+        edit_distance=ed,
+        elapsed_s=time.time() - t_start,
+    )
+
+
+def _process_sample(
+    *,
+    vlm: Any,
+    agent: MedicalAgent,
+    args: argparse.Namespace,
+    cfg: RunnerConfig,
+    attacks_yaml: dict[str, Any],
+    model_key: str,
+    task_id: str,
+    sample: TaskSample,
+    seed: int,
+    f_out: IO[str],
+) -> int:
+    """Run benign + every (attack, eps) for one sample/seed. Returns records written."""
+    benign = agent.run(
+        task_id=task_id,
+        image=sample.image,
+        prompt=sample.prompt,
+        seed=seed,
+        max_steps=args.max_steps,
+    )
+    n_written = 0
+    for attack_name in cfg.attacks:
+        for eps in resolve_epsilons(cfg, attack_name, attacks_yaml):
+            rec = _run_one_attack(
+                mode=args.mode,
+                vlm=vlm,
+                agent=agent,
+                sample=sample,
+                benign=benign,
+                attack_name=attack_name,
+                epsilon=float(eps),
+                seed=seed,
+                args=args,
+                model_key=model_key,
+                task_id=task_id,
+            )
+            f_out.write(json.dumps(rec, default=str) + "\n")
+            n_written += 1
+    return n_written
+
+
+def _iterate_records(
+    *,
+    cfg: RunnerConfig,
+    args: argparse.Namespace,
+    attacks_yaml: dict[str, Any],
+    tools: Any,
+    f_out: IO[str],
+) -> tuple[int, int]:
+    """Sweep models × tasks × samples × seeds. Returns (n_records, n_errors)."""
     n_records = 0
     n_errors = 0
-    t0 = time.time()
+    for model_key in cfg.models:
+        print(f"[runner] loading model: {model_key}")
+        vlm = load_hf_vlm(model_key)
+        agent = MedicalAgent(vlm=vlm, tools=tools)
 
-    with records_path.open("w", encoding="utf-8") as f_out:
-        for model_key in cfg.models:
-            print(f"[runner] loading model: {model_key}")
-            vlm = load_hf_vlm(model_key)
-            agent = MedicalAgent(vlm=vlm, tools=tools)
+        for task_id in cfg.tasks:
+            samples = _load_samples(cfg, task_id, args)
+            if not samples:
+                print(f"[runner] WARN no samples for {task_id}/{args.split}")
+                continue
 
-            for task_id in cfg.tasks:
-                t_override = cfg.task_overrides.get(task_id, {})
-                n_samples = int(t_override.get("dataset_split", {}).get(args.split, 0)) or None
-                samples = list(
-                    load_task(
-                        task_id,
-                        split=args.split,
-                        n=n_samples,
-                        synthetic=args.synthetic,
-                    )
-                )
-                if not samples:
-                    print(f"[runner] WARN no samples for {task_id}/{args.split}")
-                    continue
+            for sample in samples:
+                for seed in cfg.seeds:
+                    try:
+                        n_records += _process_sample(
+                            vlm=vlm,
+                            agent=agent,
+                            args=args,
+                            cfg=cfg,
+                            attacks_yaml=attacks_yaml,
+                            model_key=model_key,
+                            task_id=task_id,
+                            sample=sample,
+                            seed=seed,
+                            f_out=f_out,
+                        )
+                    except Exception as exc:
+                        n_errors += 1
+                        print(
+                            f"[runner] ERROR {type(exc).__name__} model={model_key} "
+                            f"task={task_id} sample={sample.sample_id} seed={seed} — skipping",
+                            file=sys.stderr,
+                        )
+                        traceback.print_exc()
+    return n_records, n_errors
 
-                for sample in samples:
-                    for seed in cfg.seeds:
-                        try:
-                            benign = agent.run(
-                                task_id=task_id,
-                                image=sample.image,
-                                prompt=sample.prompt,
-                                seed=seed,
-                                max_steps=args.max_steps,
-                            )
 
-                            for attack_name in cfg.attacks:
-                                eps_list = resolve_epsilons(cfg, attack_name, attacks_yaml)
-                                for eps in eps_list:
-                                    t_start = time.time()
-                                    if args.mode in GRADIENT_MODES:
-                                        attacked = run_gradient_attack(
-                                            mode=args.mode,
-                                            vlm=vlm,
-                                            agent=agent,
-                                            sample=sample,
-                                            benign=benign,
-                                            epsilon=float(eps),
-                                            steps=args.pgd_steps,
-                                            seed=seed,
-                                            max_steps=args.max_steps,
-                                            task_id=task_id,
-                                            target_tool=args.target_tool,
-                                            target_step_k=args.target_step_k,
-                                        )
-                                    else:
-                                        adv_img = perturb(args.mode, sample.image, eps, seed)
-                                        attacked = agent.run(
-                                            task_id=task_id,
-                                            image=adv_img,
-                                            prompt=sample.prompt,
-                                            seed=seed,
-                                            max_steps=args.max_steps,
-                                        )
-                                    ed = trajectory_edit_distance(
-                                        benign.tool_sequence(),
-                                        attacked.tool_sequence(),
-                                        normalize=True,
-                                    )
-                                    rec = pair_record(
-                                        model_key=model_key,
-                                        task_id=task_id,
-                                        sample_id=sample.sample_id,
-                                        attack_name=attack_name,
-                                        attack_mode=args.mode,
-                                        epsilon=float(eps),
-                                        seed=seed,
-                                        benign=benign,
-                                        attacked=attacked,
-                                        edit_distance=ed,
-                                        elapsed_s=time.time() - t_start,
-                                    )
-                                    f_out.write(json.dumps(rec, default=str) + "\n")
-                                    n_records += 1
-                        except Exception:
-                            n_errors += 1
-                            print(
-                                f"[runner] ERROR model={model_key} task={task_id} "
-                                f"sample={sample.sample_id} seed={seed} — skipping",
-                                file=sys.stderr,
-                            )
-                            traceback.print_exc()
-
+def _write_summary(
+    out_dir: Path,
+    cfg: RunnerConfig,
+    n_records: int,
+    n_errors: int,
+    t0: float,
+    records_path: Path,
+) -> None:
+    """Write summary.json and print final status line."""
     elapsed = time.time() - t0
     summary = {
         "experiment": cfg.name,
@@ -175,4 +248,31 @@ def main(argv: list[str] | None = None) -> int:
         + (f", {n_errors} error(s)" if n_errors else "")
         + f" in {elapsed:.1f}s → {records_path}"
     )
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = _build_arg_parser().parse_args(argv)
+    cfg = load_runner_config(args.config)
+    if args.dry_run:
+        print(repr(cfg))
+        return 0
+
+    records_path = _resolve_records_path(args, cfg)
+    if records_path is None:
+        return 1
+
+    attacks_yaml = _load_yaml(args.attacks_config)
+    tools = default_registry()
+    t0 = time.time()
+
+    with records_path.open("w", encoding="utf-8") as f_out:
+        n_records, n_errors = _iterate_records(
+            cfg=cfg,
+            args=args,
+            attacks_yaml=attacks_yaml,
+            tools=tools,
+            f_out=f_out,
+        )
+
+    _write_summary(records_path.parent, cfg, n_records, n_errors, t0, records_path)
     return 0 if n_errors == 0 else 2
