@@ -19,6 +19,34 @@ from .base import AttackResult
 from .loss import LossFn
 
 
+def _pgd_step(
+    *,
+    loss_fn: LossFn,
+    vlm: Any,
+    x0: torch.Tensor,
+    delta: torch.Tensor,
+    prompt_tokens: torch.Tensor,
+    target: torch.Tensor,
+    gen_kwargs: Mapping[str, Any],
+    epsilon: float,
+    alpha: float,
+    step_sign: float,
+    clip_min: float,
+    clip_max: float,
+) -> float:
+    """Single sign-SGD step. Mutates ``delta`` in place; returns scalar loss."""
+    loss = loss_fn(vlm, x0 + delta, prompt_tokens, target, gen_kwargs)
+    loss_val = float(loss.detach().cpu())
+    grad = torch.autograd.grad(loss, delta, retain_graph=False)[0]
+    with torch.no_grad():
+        delta.add_(step_sign * alpha * grad.sign())
+        delta.clamp_(-epsilon, epsilon)
+        projected = torch.clamp(x0 + delta, clip_min, clip_max) - x0
+        delta.copy_(projected)
+        delta.grad = None
+    return loss_val
+
+
 def linf_pgd_loop(
     *,
     loss_fn: LossFn,
@@ -82,15 +110,22 @@ def linf_pgd_loop(
 
         loss_traj: list[float] = []
         for _step in range(n_iter):
-            loss = loss_fn(vlm, x0 + delta, prompt_tokens, target, gen_kwargs)
-            loss_traj.append(float(loss.detach().cpu()))
-            grad = torch.autograd.grad(loss, delta, retain_graph=False)[0]
-            with torch.no_grad():
-                delta.add_(step_sign * alpha * grad.sign())
-                delta.clamp_(-epsilon, epsilon)
-                delta_data = torch.clamp(x0 + delta, clip_min, clip_max) - x0
-                delta.copy_(delta_data)
-                delta.grad = None
+            loss_traj.append(
+                _pgd_step(
+                    loss_fn=loss_fn,
+                    vlm=vlm,
+                    x0=x0,
+                    delta=delta,
+                    prompt_tokens=prompt_tokens,
+                    target=target,
+                    gen_kwargs=gen_kwargs,
+                    epsilon=epsilon,
+                    alpha=alpha,
+                    step_sign=step_sign,
+                    clip_min=clip_min,
+                    clip_max=clip_max,
+                )
+            )
 
         perturbed = torch.clamp(x0 + delta.detach(), clip_min, clip_max)
         candidate = AttackResult(
