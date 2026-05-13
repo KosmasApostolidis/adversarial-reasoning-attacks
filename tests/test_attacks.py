@@ -11,6 +11,11 @@ from __future__ import annotations
 import pytest
 import torch
 
+from adversarial_reasoning.attacks._epsilon import (
+    _LINF_EPSILON_4,
+    _LINF_EPSILON_8,
+    _LINF_EPSILON_16,
+)
 from adversarial_reasoning.attacks.pgd import PGDAttack
 
 
@@ -47,7 +52,7 @@ def test_pgd_respects_epsilon_budget():
     target = torch.zeros(1, 1, dtype=torch.long)
 
     attack = PGDAttack(
-        epsilon=8.0 / 255.0,
+        epsilon=_LINF_EPSILON_8,
         steps=20,
         random_restarts=1,
         targeted=False,
@@ -55,7 +60,7 @@ def test_pgd_respects_epsilon_budget():
     result = attack.run(vlm, image, prompt, target)
 
     linf = result.delta.abs().max().item()
-    assert linf <= 8.0 / 255.0 + 1e-6
+    assert linf <= _LINF_EPSILON_8 + 1e-6
 
 
 @pytest.mark.smoke
@@ -66,7 +71,7 @@ def test_pgd_targeted_reduces_ce_to_target():
     target = torch.tensor([[3]], dtype=torch.long)  # push the logits towards token 3
 
     attack = PGDAttack(
-        epsilon=16.0 / 255.0,
+        epsilon=_LINF_EPSILON_16,
         steps=40,
         random_restarts=1,
         targeted=True,
@@ -83,7 +88,7 @@ def test_pgd_rejects_gradient_free_backend():
         supports_gradients = False
         model_id = "toy/nograd"
 
-    attack = PGDAttack(epsilon=4.0 / 255.0, steps=5)
+    attack = PGDAttack(epsilon=_LINF_EPSILON_4, steps=5)
     with pytest.raises(ValueError):
         attack.run(
             _NoGradVLM(),

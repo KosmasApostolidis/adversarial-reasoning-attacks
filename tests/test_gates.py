@@ -5,6 +5,11 @@ from __future__ import annotations
 import numpy as np
 from PIL import Image
 
+from adversarial_reasoning.attacks._epsilon import (
+    _LINF_EPSILON_2,
+    _LINF_EPSILON_8,
+    _LINF_EPSILON_16,
+)
 from adversarial_reasoning.gates.preprocessing_transfer import run_preprocessing_transfer
 
 
@@ -17,7 +22,7 @@ def test_preprocessing_transfer_png_roundtrip_preserves_signal():
     class _Stub:
         model_id = "stub/vlm"
 
-    result = run_preprocessing_transfer(_Stub(), sample_image=img, epsilon=16.0 / 255.0)
+    result = run_preprocessing_transfer(_Stub(), sample_image=img, epsilon=_LINF_EPSILON_16)
     # PNG is lossless, so at ε=16/255 we expect ~full signal preserved.
     assert result.effective_linf_post_roundtrip > 0.0
     assert result.passed is True
@@ -29,7 +34,7 @@ def test_preprocessing_transfer_passes_typical_epsilon():
     class _Stub:
         model_id = "stub/vlm"
 
-    r = run_preprocessing_transfer(_Stub(), sample_image=img, epsilon=8.0 / 255.0)
-    assert r.gate_threshold == 2.0 / 255.0
+    r = run_preprocessing_transfer(_Stub(), sample_image=img, epsilon=_LINF_EPSILON_8)
+    assert r.gate_threshold == _LINF_EPSILON_2
     # 8/255 > 2/255 threshold → gate should pass for a PNG round-trip.
     assert r.passed is True

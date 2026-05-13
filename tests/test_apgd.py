@@ -17,6 +17,11 @@ from __future__ import annotations
 import pytest
 import torch
 
+from adversarial_reasoning.attacks._epsilon import (
+    _LINF_EPSILON_4,
+    _LINF_EPSILON_8,
+    _LINF_EPSILON_16,
+)
 from adversarial_reasoning.attacks.apgd import (
     APGDAttack,
     _checkpoints,
@@ -75,19 +80,19 @@ def test_apgd_seed_makes_runs_deterministic():
     on a trivial linear stub regardless of init."""
     vlm = _LinearStubVLM()
     image, prompt, target = _make_apgd_inputs()
-    a = APGDAttack(epsilon=8.0 / 255.0, steps=6, random_restarts=2, seed=123).run(
+    a = APGDAttack(epsilon=_LINF_EPSILON_8, steps=6, random_restarts=2, seed=123).run(
         vlm=vlm,
         image=image,
         prompt_tokens=prompt,
         target=target,
     )
-    b = APGDAttack(epsilon=8.0 / 255.0, steps=6, random_restarts=2, seed=123).run(
+    b = APGDAttack(epsilon=_LINF_EPSILON_8, steps=6, random_restarts=2, seed=123).run(
         vlm=vlm,
         image=image,
         prompt_tokens=prompt,
         target=target,
     )
-    c = APGDAttack(epsilon=8.0 / 255.0, steps=6, random_restarts=2, seed=456).run(
+    c = APGDAttack(epsilon=_LINF_EPSILON_8, steps=6, random_restarts=2, seed=456).run(
         vlm=vlm,
         image=image,
         prompt_tokens=prompt,
@@ -160,7 +165,7 @@ def test_apgd_respects_epsilon_budget() -> None:
     target = torch.tensor([[3]], dtype=torch.long)
 
     attack = APGDAttack(
-        epsilon=8.0 / 255.0,
+        epsilon=_LINF_EPSILON_8,
         steps=15,
         random_restarts=1,
         targeted=False,
@@ -168,7 +173,7 @@ def test_apgd_respects_epsilon_budget() -> None:
     result = attack.run(vlm, image, prompt, target)
 
     linf = result.delta.abs().max().item()
-    assert linf <= 8.0 / 255.0 + 1e-6
+    assert linf <= _LINF_EPSILON_8 + 1e-6
 
 
 @pytest.mark.smoke
@@ -187,7 +192,7 @@ def test_apgd_targeted_descends_loss() -> None:
     target = torch.tensor([[3]], dtype=torch.long)
 
     attack = APGDAttack(
-        epsilon=16.0 / 255.0,
+        epsilon=_LINF_EPSILON_16,
         steps=20,
         random_restarts=1,
         targeted=True,
@@ -211,7 +216,7 @@ def test_apgd_untargeted_ascends_ce() -> None:
     target = torch.tensor([[3]], dtype=torch.long)
 
     attack = APGDAttack(
-        epsilon=16.0 / 255.0,
+        epsilon=_LINF_EPSILON_16,
         steps=20,
         random_restarts=1,
         targeted=False,
@@ -229,7 +234,7 @@ def test_apgd_metadata_records_checkpoints_and_eta() -> None:
     prompt = torch.zeros(1, 1, dtype=torch.long)
     target = torch.tensor([[1]], dtype=torch.long)
 
-    result = APGDAttack(epsilon=8.0 / 255.0, steps=10, random_restarts=1).run(
+    result = APGDAttack(epsilon=_LINF_EPSILON_8, steps=10, random_restarts=1).run(
         vlm, image, prompt, target
     )
     assert "checkpoints" in result.metadata
@@ -245,7 +250,7 @@ def test_apgd_records_full_loss_trajectory() -> None:
     prompt = torch.zeros(1, 1, dtype=torch.long)
     target = torch.tensor([[2]], dtype=torch.long)
 
-    result = APGDAttack(epsilon=4.0 / 255.0, steps=12).run(vlm, image, prompt, target)
+    result = APGDAttack(epsilon=_LINF_EPSILON_4, steps=12).run(vlm, image, prompt, target)
     assert len(result.loss_trajectory) == 12
 
 
@@ -257,7 +262,7 @@ def test_apgd_random_restarts_returns_best() -> None:
     target = torch.tensor([[5]], dtype=torch.long)
 
     result = APGDAttack(
-        epsilon=8.0 / 255.0,
+        epsilon=_LINF_EPSILON_8,
         steps=8,
         random_restarts=3,
         targeted=True,
@@ -271,7 +276,7 @@ def test_apgd_rejects_gradient_free_backend() -> None:
         supports_gradients = False
         model_id = "toy/nograd"
 
-    attack = APGDAttack(epsilon=4.0 / 255.0, steps=5)
+    attack = APGDAttack(epsilon=_LINF_EPSILON_4, steps=5)
     with pytest.raises(ValueError, match="does not support gradients"):
         attack.run(
             _NoGradVLM(),
@@ -288,5 +293,5 @@ def test_apgd_accepts_4d_input_image() -> None:
     image = torch.rand(1, 3, 8, 8)
     prompt = torch.zeros(1, 1, dtype=torch.long)
     target = torch.tensor([[1]], dtype=torch.long)
-    result = APGDAttack(epsilon=4.0 / 255.0, steps=5).run(vlm, image, prompt, target)
-    assert result.delta.abs().max().item() <= 4.0 / 255.0 + 1e-6
+    result = APGDAttack(epsilon=_LINF_EPSILON_4, steps=5).run(vlm, image, prompt, target)
+    assert result.delta.abs().max().item() <= _LINF_EPSILON_4 + 1e-6

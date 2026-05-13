@@ -9,6 +9,10 @@ from __future__ import annotations
 import pytest
 import torch
 
+from adversarial_reasoning.attacks._epsilon import (
+    _LINF_EPSILON_4,
+    _LINF_EPSILON_8,
+)
 from adversarial_reasoning.attacks.trajectory_drift import TrajectoryDriftPGD
 
 
@@ -40,12 +44,12 @@ def test_drift_respects_epsilon_budget() -> None:
     target = torch.tensor([[1, 2, 3, 4]], dtype=torch.long)
 
     attack = TrajectoryDriftPGD(
-        epsilon=8.0 / 255.0,
+        epsilon=_LINF_EPSILON_8,
         steps=10,
         random_restarts=1,
     )
     result = attack.run(vlm, image, prompt, target)
-    assert result.delta.abs().max().item() <= 8.0 / 255.0 + 1e-6
+    assert result.delta.abs().max().item() <= _LINF_EPSILON_8 + 1e-6
 
 
 @pytest.mark.smoke
@@ -55,7 +59,7 @@ def test_drift_metadata_includes_kl_final() -> None:
     prompt = torch.zeros(1, 1, dtype=torch.long)
     target = torch.tensor([[1, 2, 3]], dtype=torch.long)
 
-    result = TrajectoryDriftPGD(epsilon=4.0 / 255.0, steps=8).run(vlm, image, prompt, target)
+    result = TrajectoryDriftPGD(epsilon=_LINF_EPSILON_4, steps=8).run(vlm, image, prompt, target)
     assert "kl_final" in result.metadata
     # KL ≥ 0 by definition.
     assert result.metadata["kl_final"] >= 0.0
@@ -68,7 +72,7 @@ def test_drift_uses_default_alpha_when_unspecified() -> None:
     prompt = torch.zeros(1, 1, dtype=torch.long)
     target = torch.tensor([[2, 3]], dtype=torch.long)
 
-    a = TrajectoryDriftPGD(epsilon=8.0 / 255.0, alpha=None, steps=5)
+    a = TrajectoryDriftPGD(epsilon=_LINF_EPSILON_8, alpha=None, steps=5)
     result = a.run(vlm, image, prompt, target)
     assert result.iterations == 5
 
@@ -80,7 +84,7 @@ def test_drift_rejects_gradient_free_backend() -> None:
         model_id = "toy/nograd"
 
     with pytest.raises(ValueError, match="does not support gradients"):
-        TrajectoryDriftPGD(epsilon=4.0 / 255.0, steps=4).run(
+        TrajectoryDriftPGD(epsilon=_LINF_EPSILON_4, steps=4).run(
             _NoGradVLM(),
             torch.rand(3, 8, 8),
             torch.zeros(1, 1, dtype=torch.long),
@@ -94,5 +98,5 @@ def test_drift_accepts_4d_input_image() -> None:
     image = torch.rand(1, 3, 8, 8)
     prompt = torch.zeros(1, 1, dtype=torch.long)
     target = torch.tensor([[1, 2]], dtype=torch.long)
-    result = TrajectoryDriftPGD(epsilon=4.0 / 255.0, steps=4).run(vlm, image, prompt, target)
-    assert result.delta.abs().max().item() <= 4.0 / 255.0 + 1e-6
+    result = TrajectoryDriftPGD(epsilon=_LINF_EPSILON_4, steps=4).run(vlm, image, prompt, target)
+    assert result.delta.abs().max().item() <= _LINF_EPSILON_4 + 1e-6

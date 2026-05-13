@@ -19,6 +19,10 @@ import math
 import pytest
 import torch
 
+from adversarial_reasoning.attacks._epsilon import (
+    _LINF_EPSILON_4,
+    _LINF_EPSILON_8,
+)
 from adversarial_reasoning.attacks._loop import linf_pgd_loop
 from adversarial_reasoning.attacks.loss import TokenTargetLoss
 
@@ -52,7 +56,7 @@ def _make_inputs():
 def test_linf_loop_respects_epsilon_budget():
     vlm = _LinearStubVLM()
     image, prompt, target = _make_inputs()
-    epsilon = 8.0 / 255.0
+    epsilon = _LINF_EPSILON_8
 
     res = linf_pgd_loop(
         loss_fn=TokenTargetLoss(targeted=False),
@@ -83,7 +87,7 @@ def test_linf_loop_respects_image_bounds():
         target=target,
         gen_kwargs={},
         epsilon=64.0 / 255.0,
-        alpha=8.0 / 255.0,
+        alpha=_LINF_EPSILON_8,
         n_iter=10,
         n_restarts=1,
         step_sign=1.0,
@@ -107,8 +111,8 @@ def test_linf_loop_picks_lowest_loss_restart():
         prompt_tokens=prompt,
         target=target,
         gen_kwargs={},
-        epsilon=8.0 / 255.0,
-        alpha=2.0 / 255.0,
+        epsilon=_LINF_EPSILON_8,
+        alpha=_LINF_EPSILON_8 / 4.0,
         n_iter=8,
         n_restarts=4,
         step_sign=1.0,
@@ -131,8 +135,8 @@ def test_linf_loop_step_sign_inverts_direction():
         prompt_tokens=prompt,
         target=target,
         gen_kwargs={},
-        epsilon=8.0 / 255.0,
-        alpha=2.0 / 255.0,
+        epsilon=_LINF_EPSILON_8,
+        alpha=_LINF_EPSILON_8 / 4.0,
         n_iter=15,
         n_restarts=1,
     )
@@ -186,8 +190,8 @@ def test_linf_loop_prefers_finite_restart_over_nan_restart():
         prompt_tokens=prompt,
         target=target,
         gen_kwargs={},
-        epsilon=8.0 / 255.0,
-        alpha=2.0 / 255.0,
+        epsilon=_LINF_EPSILON_8,
+        alpha=_LINF_EPSILON_8 / 4.0,
         n_iter=n_iter,
         n_restarts=2,
         step_sign=1.0,
@@ -240,8 +244,8 @@ def test_linf_loop_seed_makes_runs_deterministic():
         prompt_tokens=prompt,
         target=target,
         gen_kwargs={},
-        epsilon=8.0 / 255.0,
-        alpha=2.0 / 255.0,
+        epsilon=_LINF_EPSILON_8,
+        alpha=_LINF_EPSILON_8 / 4.0,
         n_iter=4,
         n_restarts=2,
         step_sign=1.0,
@@ -265,7 +269,7 @@ def test_linf_loop_static_metadata_passthrough():
         prompt_tokens=prompt,
         target=target,
         gen_kwargs={},
-        epsilon=4.0 / 255.0,
+        epsilon=_LINF_EPSILON_4,
         alpha=1.0 / 255.0,
         n_iter=4,
         n_restarts=1,
