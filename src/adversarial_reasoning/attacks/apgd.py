@@ -30,6 +30,7 @@ from typing import Any
 
 import torch
 
+from ._epsilon import _LINF_EPSILON_8
 from .base import AttackBase, AttackResult
 from .loss import TokenTargetLoss
 
@@ -78,7 +79,7 @@ def _step_is_improvement(
 @dataclass
 class APGDAttack(AttackBase):
     name: str = "apgd_linf"
-    epsilon: float = 8.0 / 255.0
+    epsilon: float = _LINF_EPSILON_8
     steps: int = 100
     random_restarts: int = 1
     targeted: bool = False
