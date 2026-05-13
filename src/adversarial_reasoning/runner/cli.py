@@ -79,6 +79,44 @@ def _load_samples(cfg: RunnerConfig, task_id: str, args: argparse.Namespace) -> 
     return list(load_task(task_id, split=args.split, n=n_samples, synthetic=args.synthetic))
 
 
+def _invoke_attack(
+    *,
+    mode: str,
+    vlm: Any,
+    agent: MedicalAgent,
+    sample: TaskSample,
+    benign: Any,
+    epsilon: float,
+    seed: int,
+    args: argparse.Namespace,
+    task_id: str,
+) -> Any:
+    """Dispatch by mode → gradient attack or noise perturbation. Returns Trajectory."""
+    if mode in GRADIENT_MODES:
+        return run_gradient_attack(
+            mode=mode,
+            vlm=vlm,
+            agent=agent,
+            sample=sample,
+            benign=benign,
+            epsilon=epsilon,
+            steps=args.pgd_steps,
+            seed=seed,
+            max_steps=args.max_steps,
+            task_id=task_id,
+            target_tool=args.target_tool,
+            target_step_k=args.target_step_k,
+        )
+    adv_img = perturb(mode, sample.image, epsilon, seed)
+    return agent.run(
+        task_id=task_id,
+        image=adv_img,
+        prompt=sample.prompt,
+        seed=seed,
+        max_steps=args.max_steps,
+    )
+
+
 def _run_one_attack(
     *,
     mode: str,
@@ -95,30 +133,17 @@ def _run_one_attack(
 ) -> dict[str, Any]:
     """Run one (attack_name, eps) probe against ``sample`` and return its record dict."""
     t_start = time.time()
-    if mode in GRADIENT_MODES:
-        attacked = run_gradient_attack(
-            mode=mode,
-            vlm=vlm,
-            agent=agent,
-            sample=sample,
-            benign=benign,
-            epsilon=epsilon,
-            steps=args.pgd_steps,
-            seed=seed,
-            max_steps=args.max_steps,
-            task_id=task_id,
-            target_tool=args.target_tool,
-            target_step_k=args.target_step_k,
-        )
-    else:
-        adv_img = perturb(mode, sample.image, epsilon, seed)
-        attacked = agent.run(
-            task_id=task_id,
-            image=adv_img,
-            prompt=sample.prompt,
-            seed=seed,
-            max_steps=args.max_steps,
-        )
+    attacked = _invoke_attack(
+        mode=mode,
+        vlm=vlm,
+        agent=agent,
+        sample=sample,
+        benign=benign,
+        epsilon=epsilon,
+        seed=seed,
+        args=args,
+        task_id=task_id,
+    )
     ed = trajectory_edit_distance(benign.tool_sequence(), attacked.tool_sequence(), normalize=True)
     return pair_record(
         model_key=model_key,
@@ -177,6 +202,18 @@ def _process_sample(
     return n_written
 
 
+def _log_sample_error(
+    exc: Exception, *, model_key: str, task_id: str, sample_id: str, seed: int
+) -> None:
+    """Print structured ERROR line + traceback for one failed sample/seed."""
+    print(
+        f"[runner] ERROR {type(exc).__name__} model={model_key} "
+        f"task={task_id} sample={sample_id} seed={seed} — skipping",
+        file=sys.stderr,
+    )
+    traceback.print_exc()
+
+
 def _iterate_records(
     *,
     cfg: RunnerConfig,
@@ -216,12 +253,13 @@ def _iterate_records(
                         )
                     except Exception as exc:
                         n_errors += 1
-                        print(
-                            f"[runner] ERROR {type(exc).__name__} model={model_key} "
-                            f"task={task_id} sample={sample.sample_id} seed={seed} — skipping",
-                            file=sys.stderr,
+                        _log_sample_error(
+                            exc,
+                            model_key=model_key,
+                            task_id=task_id,
+                            sample_id=sample.sample_id,
+                            seed=seed,
                         )
-                        traceback.print_exc()
     return n_records, n_errors
 
 

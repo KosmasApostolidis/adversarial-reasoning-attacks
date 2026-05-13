@@ -27,6 +27,7 @@ from typing import Any
 
 import torch
 
+from ._epsilon import _LINF_EPSILON_8
 from ._loop import linf_pgd_loop
 from .base import AttackBase, AttackResult
 from .loss import TokenTargetLoss
@@ -35,7 +36,7 @@ from .loss import TokenTargetLoss
 @dataclass
 class PGDAttack(AttackBase):
     name: str = "pgd_linf"
-    epsilon: float = 8.0 / 255.0
+    epsilon: float = _LINF_EPSILON_8
     alpha: float | None = None  # step size; default = epsilon / 4
     steps: int = 40
     random_restarts: int = 1

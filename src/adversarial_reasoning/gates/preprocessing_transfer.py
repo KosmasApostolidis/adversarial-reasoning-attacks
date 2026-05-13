@@ -23,6 +23,8 @@ import numpy as np
 import torch
 from PIL import Image
 
+from ..attacks._epsilon import _LINF_EPSILON_16, _LINF_EPSILON_2
+
 
 @dataclass(frozen=True)
 class PreprocessingTransferResult:
@@ -37,8 +39,8 @@ def run_preprocessing_transfer(
     hf_vlm: object,
     *,
     sample_image: Image.Image,
-    epsilon: float = 16.0 / 255.0,
-    gate_threshold: float = 2.0 / 255.0,
+    epsilon: float = _LINF_EPSILON_16,
+    gate_threshold: float = _LINF_EPSILON_2,
 ) -> PreprocessingTransferResult:
     """Run the preprocessing-transfer gate for one VLM.
 
@@ -103,8 +105,8 @@ def _cli() -> int:
         help="Path to sample image (PNG/JPG). Synthetic if omitted.",
     )
     p.add_argument("--model-name", type=str, default="generic", help="Label for report only.")
-    p.add_argument("--epsilon", type=float, default=16.0 / 255.0)
-    p.add_argument("--gate-threshold", type=float, default=2.0 / 255.0)
+    p.add_argument("--epsilon", type=float, default=_LINF_EPSILON_16)
+    p.add_argument("--gate-threshold", type=float, default=_LINF_EPSILON_2)
     p.add_argument("--out", type=str, default="runs/gates/preprocessing_transfer.txt")
     args = p.parse_args()
 

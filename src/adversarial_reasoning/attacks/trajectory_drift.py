@@ -31,6 +31,7 @@ from typing import Any
 
 import torch
 
+from ._epsilon import _LINF_EPSILON_8
 from ._loop import linf_pgd_loop
 from .base import AttackBase, AttackResult
 from .loss import TrajectoryDriftLoss
@@ -39,7 +40,7 @@ from .loss import TrajectoryDriftLoss
 @dataclass
 class TrajectoryDriftPGD(AttackBase):
     name: str = "trajectory_drift_pgd"
-    epsilon: float = 8.0 / 255.0
+    epsilon: float = _LINF_EPSILON_8
     alpha: float | None = None
     steps: int = 40
     random_restarts: int = 1

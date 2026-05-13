@@ -18,6 +18,7 @@ from typing import Any
 
 import torch
 
+from ._epsilon import _LINF_EPSILON_8
 from .base import AttackBase, AttackResult
 from .pgd import PGDAttack
 from .targets import build_target_tokens
@@ -28,7 +29,7 @@ __all__ = ["TargetedToolPGD", "build_target_tokens"]
 @dataclass
 class TargetedToolPGD(AttackBase):
     name: str = "targeted_tool_pgd"
-    epsilon: float = 8.0 / 255.0
+    epsilon: float = _LINF_EPSILON_8
     alpha: float | None = None
     steps: int = 40
     random_restarts: int = 1

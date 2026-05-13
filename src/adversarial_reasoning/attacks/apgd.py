@@ -30,6 +30,7 @@ from typing import Any
 
 import torch
 
+from ._epsilon import _LINF_EPSILON_8
 from .base import AttackBase, AttackResult
 from .loss import TokenTargetLoss
 
@@ -42,6 +43,14 @@ _APGD_P_FLOOR: float = 0.06
 
 # Strict step-over-step improvement tolerance for ρ_w success counting.
 _APGD_IMPROVEMENT_TOL: float = 1e-12
+
+# Checkpoint-condition tolerances (Croce & Hein 2020):
+#   _APGD_ETA_CONVERGED_RTOL — η has not been halved since last checkpoint.
+#   _APGD_LOSS_PROGRESS_TOL  — loss_best has not improved by this margin.
+#   _APGD_ETA_FLOOR          — minimum η; halving never goes below this.
+_APGD_ETA_CONVERGED_RTOL: float = 1e-12
+_APGD_LOSS_PROGRESS_TOL: float = 1e-9
+_APGD_ETA_FLOOR: float = 1e-8
 
 
 def _checkpoints(n_iter: int) -> list[int]:
@@ -70,7 +79,7 @@ def _step_is_improvement(
 @dataclass
 class APGDAttack(AttackBase):
     name: str = "apgd_linf"
-    epsilon: float = 8.0 / 255.0
+    epsilon: float = _LINF_EPSILON_8
     steps: int = 100
     random_restarts: int = 1
     targeted: bool = False
@@ -90,6 +99,16 @@ class APGDAttack(AttackBase):
         forward_kwargs: dict[str, Any] | None = None,
         **_ignored: Any,
     ) -> AttackResult:
+        """Run APGD-Linf and return the best-loss restart.
+
+        Intentionally not decomposed: the Croce-Hein 2020 adaptive-step
+        + heavy-ball momentum + warm-restart logic is kept as one
+        cohesive block to preserve byte-identical numeric output with
+        the published paper and the existing ``test_apgd.py`` fixtures
+        (292 LOC of pinned numerics). Splitting the inner loop into
+        helpers risks subtle iteration-order or floating-point shifts
+        that would silently break the regression suite.
+        """
         if not getattr(vlm, "supports_gradients", False):
             raise ValueError(f"VLM backend {vlm.__class__.__name__} does not support gradients.")
 
@@ -189,12 +208,12 @@ class APGDAttack(AttackBase):
                         checkpoints[ckpt_idx - 1] if ckpt_idx > 0 else 0
                     )
                     cond1 = success_count < self.rho * window
-                    cond2 = math.isclose(eta, eta_at_last_ckpt, rel_tol=1e-12) and not (
-                        loss_best < loss_at_last_ckpt - 1e-9
-                    )
+                    cond2 = math.isclose(
+                        eta, eta_at_last_ckpt, rel_tol=_APGD_ETA_CONVERGED_RTOL
+                    ) and not (loss_best < loss_at_last_ckpt - _APGD_LOSS_PROGRESS_TOL)
                     if cond1 or cond2:
                         with torch.no_grad():
-                            eta = max(eta / 2.0, 1e-8)
+                            eta = max(eta / 2.0, _APGD_ETA_FLOOR)
                             delta_data = (x_best - x0).detach()
                             delta.copy_(delta_data)
                             delta.grad = None

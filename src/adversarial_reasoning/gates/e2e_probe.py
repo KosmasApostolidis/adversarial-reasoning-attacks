@@ -29,6 +29,7 @@ import torch
 from PIL import Image
 
 from ..agents.medical_agent import MedicalAgent
+from ..attacks._epsilon import _LINF_EPSILON_4
 from ..attacks.pgd import PGDAttack
 from ..tools.registry import default_registry
 
@@ -65,7 +66,7 @@ def run_e2e_probe(
     image: Image.Image,
     prompt: str,
     task_id: str = "e2e_probe",
-    epsilon: float = 4.0 / 255.0,
+    epsilon: float = _LINF_EPSILON_4,
     steps: int = 5,
 ) -> E2EProbeResult:
     """Run the minimal wiring probe.
