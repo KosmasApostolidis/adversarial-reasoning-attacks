@@ -54,7 +54,6 @@ _APGD_ETA_FLOOR: float = 1e-8
 
 _APGD_ETA_INIT_MULTIPLIER: float = 2.0  # η starts at multiplier × ε
 
-
 def _checkpoints(n_iter: int) -> list[int]:
     """Return APGD checkpoint iteration indices for ``n_iter`` total steps."""
     p = [0.0, _APGD_P1_INIT]
