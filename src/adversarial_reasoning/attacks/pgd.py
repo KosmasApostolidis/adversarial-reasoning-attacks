@@ -32,6 +32,8 @@ from ._loop import linf_pgd_loop
 from .base import AttackBase, AttackResult
 from .loss import TokenTargetLoss
 
+_PGD_ALPHA_DIVISOR: float = 4.0
+
 
 @dataclass
 class PGDAttack(AttackBase):
@@ -71,7 +73,7 @@ class PGDAttack(AttackBase):
         if x0.ndim == 3:
             x0 = x0.unsqueeze(0)
 
-        alpha = self.alpha if self.alpha is not None else self.epsilon / 4.0
+        alpha = self.alpha if self.alpha is not None else self.epsilon / _PGD_ALPHA_DIVISOR
         # TokenTargetLoss already encodes targeted/untargeted semantics via
         # ±CE. The loop always descends on the returned scalar (step_sign=-1)
         # so that:

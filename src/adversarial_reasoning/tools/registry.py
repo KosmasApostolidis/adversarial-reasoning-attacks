@@ -49,12 +49,6 @@ class ToolRegistry:
     def schemas(self) -> list[dict[str, Any]]:
         return [t.schema_dict() for t in self._tools.values()]
 
-    def subset(self, names: list[str]) -> ToolRegistry:
-        new = ToolRegistry()
-        for n in names:
-            new.register(self.get(n))
-        return new
-
 
 def default_registry() -> ToolRegistry:
     """Build the 6-tool sandboxed registry used by the medical agent."""

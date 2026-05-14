@@ -33,10 +33,16 @@ def _pgd_step(
     step_sign: float,
     clip_min: float,
     clip_max: float,
-) -> float:
-    """Single sign-SGD step. Mutates ``delta`` in place; returns scalar loss."""
+    losses: list[float],
+) -> None:
+    """Single sign-SGD step. Mutates ``delta`` in place; appends loss to ``losses``.
+
+    CQS note: both loss and gradient come from the same forward pass, so the
+    loss is recorded as a side channel rather than returned — avoiding the
+    command/query collision without a second forward pass.
+    """
     loss = loss_fn(vlm, x0 + delta, prompt_tokens, target, gen_kwargs)
-    loss_val = float(loss.detach().cpu())
+    losses.append(float(loss.detach().cpu()))
     grad = torch.autograd.grad(loss, delta, retain_graph=False)[0]
     with torch.no_grad():
         delta.add_(step_sign * alpha * grad.sign())
@@ -44,7 +50,6 @@ def _pgd_step(
         projected = torch.clamp(x0 + delta, clip_min, clip_max) - x0
         delta.copy_(projected)
         delta.grad = None
-    return loss_val
 
 
 def _zero_epsilon_result(
@@ -96,21 +101,20 @@ def _run_one_restart(
 
     loss_traj: list[float] = []
     for _step in range(n_iter):
-        loss_traj.append(
-            _pgd_step(
-                loss_fn=loss_fn,
-                vlm=vlm,
-                x0=x0,
-                delta=delta,
-                prompt_tokens=prompt_tokens,
-                target=target,
-                gen_kwargs=gen_kwargs,
-                epsilon=epsilon,
-                alpha=alpha,
-                step_sign=step_sign,
-                clip_min=clip_min,
-                clip_max=clip_max,
-            )
+        _pgd_step(
+            loss_fn=loss_fn,
+            vlm=vlm,
+            x0=x0,
+            delta=delta,
+            prompt_tokens=prompt_tokens,
+            target=target,
+            gen_kwargs=gen_kwargs,
+            epsilon=epsilon,
+            alpha=alpha,
+            step_sign=step_sign,
+            clip_min=clip_min,
+            clip_max=clip_max,
+            losses=loss_traj,
         )
 
     perturbed = torch.clamp(x0 + delta.detach(), clip_min, clip_max)

@@ -52,6 +52,8 @@ _APGD_ETA_CONVERGED_RTOL: float = 1e-12
 _APGD_LOSS_PROGRESS_TOL: float = 1e-9
 _APGD_ETA_FLOOR: float = 1e-8
 
+_APGD_ETA_INIT_MULTIPLIER: float = 2.0  # η starts at multiplier × ε
+
 
 def _checkpoints(n_iter: int) -> list[int]:
     """Return APGD checkpoint iteration indices for ``n_iter`` total steps."""
@@ -61,6 +63,24 @@ def _checkpoints(n_iter: int) -> list[int]:
         p.append(min(nxt, 1.0))
     pts = sorted({max(1, math.ceil(pj * n_iter)) for pj in p[1:]})
     return [c for c in pts if c <= n_iter]
+
+
+def _checkpoint_triggered(
+    success_count: int,
+    window: int,
+    rho: float,
+    eta: float,
+    eta_at_last_ckpt: float,
+    loss_best: float,
+    loss_at_last_ckpt: float,
+) -> bool:
+    """True when APGD step-size should halve (Croce & Hein 2020 §3.2)."""
+    low_success = success_count < rho * window
+    eta_stuck = math.isclose(
+        eta, eta_at_last_ckpt, rel_tol=_APGD_ETA_CONVERGED_RTOL
+    )
+    loss_stuck = not (loss_best < loss_at_last_ckpt - _APGD_LOSS_PROGRESS_TOL)
+    return low_success or (eta_stuck and loss_stuck)
 
 
 def _step_is_improvement(
@@ -159,7 +179,7 @@ class APGDAttack(AttackBase):
             delta = torch.clamp(x0 + delta, self.clip_min, self.clip_max) - x0
             delta.requires_grad_(True)
 
-            eta = 2.0 * self.epsilon
+            eta = _APGD_ETA_INIT_MULTIPLIER * self.epsilon
             x_prev = (x0 + delta).detach().clone()
             x_best = x_prev.clone()
             loss_best = float("inf")
@@ -207,13 +227,12 @@ class APGDAttack(AttackBase):
                     window = checkpoints[ckpt_idx] - (
                         checkpoints[ckpt_idx - 1] if ckpt_idx > 0 else 0
                     )
-                    cond1 = success_count < self.rho * window
-                    cond2 = math.isclose(
-                        eta, eta_at_last_ckpt, rel_tol=_APGD_ETA_CONVERGED_RTOL
-                    ) and not (loss_best < loss_at_last_ckpt - _APGD_LOSS_PROGRESS_TOL)
-                    if cond1 or cond2:
+                    if _checkpoint_triggered(
+                        success_count, window, self.rho,
+                        eta, eta_at_last_ckpt, loss_best, loss_at_last_ckpt,
+                    ):
                         with torch.no_grad():
-                            eta = max(eta / 2.0, _APGD_ETA_FLOOR)
+                            eta = max(eta / _APGD_ETA_INIT_MULTIPLIER, _APGD_ETA_FLOOR)
                             delta_data = (x_best - x0).detach()
                             delta.copy_(delta_data)
                             delta.grad = None

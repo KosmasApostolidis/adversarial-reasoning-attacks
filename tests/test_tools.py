@@ -55,7 +55,3 @@ def test_tool_schemas_are_json_serialisable():
     assert len(schemas) == 6
 
 
-def test_registry_subset():
-    reg = default_registry()
-    sub = reg.subset(["query_guidelines", "draft_report"])
-    assert sub.names() == ["query_guidelines", "draft_report"]

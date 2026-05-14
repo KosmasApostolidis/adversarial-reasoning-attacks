@@ -19,6 +19,8 @@ from ..attacks.targets import (
     target_from_trajectory,
 )
 from ..attacks.trajectory_drift import TrajectoryDriftPGD
+
+_ATK_CLIP_BOUND: float = 3.0  # pixel-value clipping for normalized tensors
 from .config import GRADIENT_MODES
 
 
@@ -49,8 +51,8 @@ def build_attack(
     steps: int,
     target_tool: str = "escalate_to_specialist",
     target_step_k: int = 0,
-    clip_min: float = -3.0,
-    clip_max: float = 3.0,
+    clip_min: float = -_ATK_CLIP_BOUND,
+    clip_max: float = _ATK_CLIP_BOUND,
 ) -> AttackBase:
     """Construct an attack instance given the runner ``--mode`` value."""
     if mode == "pgd":
@@ -110,6 +112,47 @@ def _build_attack_target(
     if mode == "trajectory_drift":
         return target_from_trajectory(vlm, benign, prompt_input_ids)
     return target_from_benign(vlm, benign, prompt_input_ids)
+
+
+def _reshape_and_reinfer(
+    *,
+    res: Any,  # AttackResult
+    pixel_values: Any,  # torch.Tensor
+    agent: Any,
+    sample: Any,
+    task_id: str,
+    seed: int,
+    max_steps: int,
+    model_kwargs: dict[str, Any],
+    mode: str,
+    target_tool: str,
+    target_step_k: int,
+) -> Any:  # Trajectory
+    """Reshape perturbed tensor, re-run agent, attach attack metadata."""
+    import torch
+
+    perturbed_pv = res.perturbed_image
+    if perturbed_pv.ndim == pixel_values.ndim - 1:
+        perturbed_pv = perturbed_pv.unsqueeze(0)
+    if perturbed_pv.shape != pixel_values.shape:
+        perturbed_pv = perturbed_pv.reshape(pixel_values.shape)
+
+    attacked = agent.run_with_pixel_values(
+        task_id=task_id,
+        pixel_values=perturbed_pv.to(pixel_values.dtype),
+        prompt=sample.prompt,
+        template_image=sample.image,
+        seed=seed,
+        max_steps=max_steps,
+        gen_kwargs=dict(model_kwargs),
+    )
+    attacked.metadata[f"{mode}_loss_final"] = float(res.loss_final)
+    attacked.metadata[f"{mode}_steps"] = int(res.iterations)
+    if mode == "targeted_tool":
+        attacked.metadata["target_tool"] = target_tool
+        attacked.metadata["target_step_k"] = int(target_step_k)
+        attacked.metadata["targeted_hit"] = int(target_tool in attacked.tool_sequence())
+    return attacked
 
 
 def run_gradient_attack(
@@ -192,29 +235,16 @@ def run_gradient_attack(
         forward_kwargs=fwd_kwargs,
     )
 
-    perturbed_pv = res.perturbed_image
-    if perturbed_pv.ndim == pixel_values.ndim - 1:
-        perturbed_pv = perturbed_pv.unsqueeze(0)
-    if perturbed_pv.shape != pixel_values.shape:
-        # ``.reshape`` falls back to a copy when the tensor isn't contiguous;
-        # ``.view`` would raise after squeeze/unsqueeze chains in the attack
-        # leave the storage non-contiguous.
-        perturbed_pv = perturbed_pv.reshape(pixel_values.shape)
-
-    attacked = agent.run_with_pixel_values(
+    return _reshape_and_reinfer(
+        res=res,
+        pixel_values=pixel_values,
+        agent=agent,
+        sample=sample,
         task_id=task_id,
-        pixel_values=perturbed_pv.to(pixel_values.dtype),
-        prompt=sample.prompt,
-        template_image=sample.image,
         seed=seed,
         max_steps=max_steps,
-        gen_kwargs=dict(model_kwargs),
+        model_kwargs=model_kwargs,
+        mode=mode,
+        target_tool=target_tool,
+        target_step_k=target_step_k,
     )
-    attacked.metadata[f"{mode}_loss_final"] = float(res.loss_final)
-    attacked.metadata[f"{mode}_steps"] = int(res.iterations)
-    if mode == "targeted_tool":
-        attacked.metadata["target_tool"] = target_tool
-        attacked.metadata["target_step_k"] = int(target_step_k)
-        seq = attacked.tool_sequence()
-        attacked.metadata["targeted_hit"] = int(target_tool in seq)
-    return attacked
