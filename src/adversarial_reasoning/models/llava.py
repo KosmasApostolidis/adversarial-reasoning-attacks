@@ -10,6 +10,8 @@ from PIL import Image
 from ..types import AttackInputs
 from .base import VLMBase, VLMGenerateResult
 
+_MIN_TEMP: float = 1e-5  # temperature floor for generation kwargs
+
 
 class LlavaNext(VLMBase):
     family = "llava_next"
@@ -63,7 +65,7 @@ class LlavaNext(VLMBase):
                 **inputs,
                 max_new_tokens=max_new_tokens,
                 do_sample=temperature > 0.0,
-                temperature=max(temperature, 1e-5),
+                temperature=max(temperature, _MIN_TEMP),
             )
 
         gen_ids = output_ids[0, inputs["input_ids"].shape[1] :]
@@ -158,7 +160,7 @@ class LlavaNext(VLMBase):
                 attention_mask=proc_inputs["attention_mask"],
                 max_new_tokens=max_new_tokens,
                 do_sample=temperature > 0.0,
-                temperature=max(temperature, 1e-5),
+                temperature=max(temperature, _MIN_TEMP),
                 return_dict_in_generate=True,
                 output_scores=False,
             )

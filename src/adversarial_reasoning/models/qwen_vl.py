@@ -10,6 +10,8 @@ from PIL import Image
 from ..types import AttackInputs
 from .base import VLMBase, VLMGenerateResult
 
+_MIN_TEMP: float = 1e-5  # temperature floor for generation kwargs
+
 
 class QwenVL(VLMBase):
     family = "qwen_vl"
@@ -92,7 +94,7 @@ class QwenVL(VLMBase):
                 **inputs,
                 max_new_tokens=max_new_tokens,
                 do_sample=temperature > 0.0,
-                temperature=max(temperature, 1e-5),
+                temperature=max(temperature, _MIN_TEMP),
                 return_dict_in_generate=True,
                 output_scores=False,
             )
@@ -189,7 +191,7 @@ class QwenVL(VLMBase):
                 attention_mask=proc_inputs["attention_mask"],
                 max_new_tokens=max_new_tokens,
                 do_sample=temperature > 0.0,
-                temperature=max(temperature, 1e-5),
+                temperature=max(temperature, _MIN_TEMP),
                 return_dict_in_generate=True,
                 output_scores=False,
             )

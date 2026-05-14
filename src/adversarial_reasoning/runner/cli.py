@@ -7,6 +7,7 @@ import json
 import sys
 import time
 import traceback
+from itertools import product
 from pathlib import Path
 from typing import IO, Any
 
@@ -236,30 +237,29 @@ def _iterate_records(
                 print(f"[runner] WARN no samples for {task_id}/{args.split}")
                 continue
 
-            for sample in samples:
-                for seed in cfg.seeds:
-                    try:
-                        n_records += _process_sample(
-                            vlm=vlm,
-                            agent=agent,
-                            args=args,
-                            cfg=cfg,
-                            attacks_yaml=attacks_yaml,
-                            model_key=model_key,
-                            task_id=task_id,
-                            sample=sample,
-                            seed=seed,
-                            f_out=f_out,
-                        )
-                    except Exception as exc:
-                        n_errors += 1
-                        _log_sample_error(
-                            exc,
-                            model_key=model_key,
-                            task_id=task_id,
-                            sample_id=sample.sample_id,
-                            seed=seed,
-                        )
+            for sample, seed in product(samples, cfg.seeds):
+                try:
+                    n_records += _process_sample(
+                        vlm=vlm,
+                        agent=agent,
+                        args=args,
+                        cfg=cfg,
+                        attacks_yaml=attacks_yaml,
+                        model_key=model_key,
+                        task_id=task_id,
+                        sample=sample,
+                        seed=seed,
+                        f_out=f_out,
+                    )
+                except Exception as exc:
+                    n_errors += 1
+                    _log_sample_error(
+                        exc,
+                        model_key=model_key,
+                        task_id=task_id,
+                        sample_id=sample.sample_id,
+                        seed=seed,
+                    )
     return n_records, n_errors
 
 

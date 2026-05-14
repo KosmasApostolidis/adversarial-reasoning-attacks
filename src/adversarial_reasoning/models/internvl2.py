@@ -32,6 +32,8 @@ _IMG_START_TOKEN = "<img>"
 _IMG_END_TOKEN = "</img>"
 _IMG_CONTEXT_TOKEN = "<IMG_CONTEXT>"
 
+_MIN_TEMP: float = 1e-5  # temperature floor for generation kwargs
+
 
 def _build_transform(input_size: int) -> T.Compose:
     return T.Compose(
@@ -317,7 +319,7 @@ class InternVL2(VLMBase):
                 attention_mask=model_inputs["attention_mask"],
                 max_new_tokens=max_new_tokens,
                 do_sample=temperature > 0.0,
-                temperature=max(temperature, 1e-5),
+                temperature=max(temperature, _MIN_TEMP),
             )
         gen_ids = output_ids[0, model_inputs["input_ids"].shape[1] :]
         text_out = self.tokenizer.decode(gen_ids, skip_special_tokens=True)

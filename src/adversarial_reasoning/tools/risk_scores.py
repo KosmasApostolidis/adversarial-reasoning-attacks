@@ -14,6 +14,7 @@ from .registry import Tool
 _PI_RADS_GRADE_CAP: int = 5        # ISUP grade group 1-5
 _PI_RADS_PSAD_WEIGHT: float = 20.0  # PSA-density scaling factor
 _PI_RADS_GRADE_WEIGHT: float = 3.0  # lesion-grade contribution
+_PI_RADS_PRECISION: int = 3         # decimal places for score rounding
 
 # D'Amico risk stratification (JAMA 1998;280:969-974).
 # https://doi.org/10.1001/jama.280.11.969
@@ -45,7 +46,7 @@ def _pi_rads_like(psa: float, volume_cc: float, lesion_grade: int) -> float:
         raise ValueError("volume_cc must be positive.")
     psad = psa / volume_cc
     grade_factor = max(0, min(lesion_grade, _PI_RADS_GRADE_CAP)) / float(_PI_RADS_GRADE_CAP)
-    return round(min(5.0, psad * _PI_RADS_PSAD_WEIGHT + grade_factor * _PI_RADS_GRADE_WEIGHT), 3)
+    return round(min(float(_PI_RADS_GRADE_CAP), psad * _PI_RADS_PSAD_WEIGHT + grade_factor * _PI_RADS_GRADE_WEIGHT), _PI_RADS_PRECISION)
 
 
 def _damico_like(psa: float, gleason: int, t_stage: int) -> float:

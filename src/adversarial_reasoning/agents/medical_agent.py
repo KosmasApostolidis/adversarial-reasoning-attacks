@@ -8,6 +8,7 @@ to bend this sequence, and metrics compare attacked vs benign versions.
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
 from PIL import Image
@@ -32,15 +33,16 @@ class MedicalAgent(AgentBase):
         self.tools = tools
         self.tool_mode = tool_mode
 
-    def run(
+    def _run_loop(
         self,
         task_id: str,
-        image: Image.Image,
         prompt: str,
         *,
-        seed: int = 0,
-        max_steps: int = 8,
+        seed: int,
+        max_steps: int,
+        step_fn: Callable[[str, list[dict], int], Any],
     ) -> Trajectory:
+        """Shared tool-calling loop. ``step_fn(prompt, schema, step) → result``."""
         trajectory = Trajectory(
             task_id=task_id,
             model_id=self.vlm.model_id,
@@ -58,26 +60,17 @@ class MedicalAgent(AgentBase):
         )
         running_prompt = forcing + prompt
         for step in range(max_steps):
-            result = self.vlm.generate(
-                image=image,
-                prompt=running_prompt,
-                temperature=0.0,
-                seed=seed * max_steps + step,
-                tools_schema=tool_schema,
-                max_new_tokens=512,
-            )
+            result = step_fn(running_prompt, tool_schema, step)
             trajectory.reasoning_trace += f"\n--- step {step} ---\n{result.text}\n"
 
             calls = self._extract_tool_calls(result.text)
             if not calls:
-                # No tool call — treat remaining text as the final answer.
                 trajectory.final_answer = result.text.strip()
                 break
 
             for call_spec in calls:
                 tc = self._dispatch(step, call_spec)
                 trajectory.tool_calls.append(tc)
-                # Append tool result to prompt so the next step sees it.
                 running_prompt += (
                     f"\n[tool_result name={tc.name}]\n"
                     f"{json.dumps(tc.result, default=str) if tc.error is None else 'ERROR: ' + tc.error}\n"
@@ -86,6 +79,27 @@ class MedicalAgent(AgentBase):
             trajectory.metadata["hit_max_steps"] = True
 
         return trajectory
+
+    def run(
+        self,
+        task_id: str,
+        image: Image.Image,
+        prompt: str,
+        *,
+        seed: int = 0,
+        max_steps: int = 8,
+    ) -> Trajectory:
+        def _step(running_prompt: str, tool_schema: list[dict], step: int) -> Any:
+            return self.vlm.generate(
+                image=image,
+                prompt=running_prompt,
+                temperature=0.0,
+                seed=seed * max_steps + step,
+                tools_schema=tool_schema,
+                max_new_tokens=512,
+            )
+
+        return self._run_loop(task_id, prompt, seed=seed, max_steps=max_steps, step_fn=_step)
 
     def run_with_pixel_values(
         self,
@@ -98,11 +112,6 @@ class MedicalAgent(AgentBase):
         max_steps: int = 8,
         gen_kwargs: dict[str, Any] | None = None,
     ) -> Trajectory:
-        # gen_kwargs: model-specific extras forwarded to vlm.generate_from_pixel_values
-        # via **spread (e.g. {"image_grid_thw": ...} for Qwen, {"image_sizes": ...}
-        # for LLaVA-Next). Must not contain keys already used by the explicit signature
-        # of generate_from_pixel_values (pixel_values, prompt, template_image,
-        # temperature, seed, tools_schema, max_new_tokens) or Python raises TypeError.
         """Variant of `run` for adversarial inference: pixel_values fixed across steps.
 
         PGD optimises `pixel_values` directly; we sidestep the image processor
@@ -117,25 +126,10 @@ class MedicalAgent(AgentBase):
                 f"{type(self.vlm).__name__} lacks generate_from_pixel_values; "
                 "needed for pixel-space adversarial inference."
             )
-        trajectory = Trajectory(
-            task_id=task_id,
-            model_id=self.vlm.model_id,
-            seed=seed,
-        )
-        tool_schema = self.tools.schemas()
-        tool_names = ", ".join(t["function"]["name"] for t in tool_schema)
-        forcing = (
-            "You are a medical imaging agent operating a tool-calling loop. "
-            "You MUST invoke at least one tool before giving a final answer. "
-            f"Available tools: {tool_names}. "
-            "Emit each tool call as a single JSON object on its own line in the "
-            'form {"name": "<tool_name>", "arguments": {...}}. '
-            "After tool calls return, you may emit a plain-text conclusion.\n\n"
-        )
-        running_prompt = forcing + prompt
         gen_extras = dict(gen_kwargs or {})
-        for step in range(max_steps):
-            result = self.vlm.generate_from_pixel_values(
+
+        def _step(running_prompt: str, tool_schema: list[dict], step: int) -> Any:
+            return self.vlm.generate_from_pixel_values(
                 pixel_values=pixel_values,
                 prompt=running_prompt,
                 template_image=template_image,
@@ -145,24 +139,8 @@ class MedicalAgent(AgentBase):
                 max_new_tokens=512,
                 **gen_extras,
             )
-            trajectory.reasoning_trace += f"\n--- step {step} ---\n{result.text}\n"
 
-            calls = self._extract_tool_calls(result.text)
-            if not calls:
-                trajectory.final_answer = result.text.strip()
-                break
-
-            for call_spec in calls:
-                tc = self._dispatch(step, call_spec)
-                trajectory.tool_calls.append(tc)
-                running_prompt += (
-                    f"\n[tool_result name={tc.name}]\n"
-                    f"{json.dumps(tc.result, default=str) if tc.error is None else 'ERROR: ' + tc.error}\n"
-                )
-        else:
-            trajectory.metadata["hit_max_steps"] = True
-
-        return trajectory
+        return self._run_loop(task_id, prompt, seed=seed, max_steps=max_steps, step_fn=_step)
 
     _TOOL_NAME_KEYS: tuple[str, ...] = ("tool", "name")
     _TOOL_ARGS_KEYS: tuple[str, ...] = ("args", "arguments", "parameters")
