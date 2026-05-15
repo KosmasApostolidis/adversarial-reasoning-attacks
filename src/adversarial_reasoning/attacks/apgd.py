@@ -25,7 +25,7 @@ rule is too distinct to share with PGD's plain sign-SGD loop.
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 import torch
@@ -96,6 +96,23 @@ def _step_is_improvement(
 
 
 @dataclass
+class _ApgdLoopState:
+    """Mutable per-restart state for the APGD inner loop."""
+
+    delta: torch.Tensor
+    eta: float
+    x_prev: torch.Tensor
+    x_best: torch.Tensor
+    loss_best: float
+    loss_prev: float
+    success_count: int
+    loss_at_last_ckpt: float
+    eta_at_last_ckpt: float
+    ckpt_idx: int
+    loss_traj: list[float] = field(default_factory=list)
+
+
+@dataclass
 class APGDAttack(AttackBase):
     name: str = "apgd_linf"
     epsilon: float = _LINF_EPSILON_8
@@ -118,16 +135,7 @@ class APGDAttack(AttackBase):
         forward_kwargs: dict[str, Any] | None = None,
         **_ignored: Any,
     ) -> AttackResult:
-        """Run APGD-Linf and return the best-loss restart.
-
-        Intentionally not decomposed: the Croce-Hein 2020 adaptive-step
-        + heavy-ball momentum + warm-restart logic is kept as one
-        cohesive block to preserve byte-identical numeric output with
-        the published paper and the existing ``test_apgd.py`` fixtures
-        (292 LOC of pinned numerics). Splitting the inner loop into
-        helpers risks subtle iteration-order or floating-point shifts
-        that would silently break the regression suite.
-        """
+        """Run APGD-Linf and return the best-loss restart."""
         if not getattr(vlm, "supports_gradients", False):
             raise ValueError(f"VLM backend {vlm.__class__.__name__} does not support gradients.")
 
@@ -135,130 +143,194 @@ class APGDAttack(AttackBase):
         if x0.ndim == 3:
             x0 = x0.unsqueeze(0)
 
-        # ε=0 ⇒ no admissible perturbation; skip the inner loop. Same
-        # rationale as ``linf_pgd_loop`` short-circuit. Note ``grad.sign()``
-        # returns 0 in saturated regions — sign-SGD limitation, not fixed
-        # here.
         if self.epsilon == 0.0:
-            zero_delta = torch.zeros_like(x0)
-            perturbed = torch.clamp(x0, self.clip_min, self.clip_max)
-            return AttackResult(
-                perturbed_image=perturbed.squeeze(0) if perturbed.shape[0] == 1 else perturbed,
-                delta=zero_delta.squeeze(0) if zero_delta.shape[0] == 1 else zero_delta,
-                loss_final=float("nan"),
-                loss_trajectory=[],
-                iterations=0,
-                success=False,
-                metadata={
-                    "epsilon": self.epsilon,
-                    "targeted": self.targeted,
-                    "short_circuit": "epsilon_zero",
-                },
-            )
+            return self._zero_epsilon_result(x0)
 
         loss_fn = TokenTargetLoss(targeted=self.targeted)
         gen_kwargs = forward_kwargs or {}
         checkpoints = _checkpoints(self.steps)
         # Always descend on the loss returned by ``loss_fn``. ``TokenTargetLoss``
         # already encodes the attacker's intent via its ``targeted`` flag
-        # (returns ``-CE`` untargeted, ``+CE`` targeted). PGD uses the same
-        # convention via ``step_sign=-1`` in :func:`linf_pgd_loop`. A previous
-        # version flipped ``sign`` based on ``targeted``, which silently turned
-        # targeted APGD into a gradient *ascent* on CE — the opposite of intent.
+        # (returns ``-CE`` untargeted, ``+CE`` targeted).
         step_sign = -1.0
 
-        if self.seed is not None:
-            torch.manual_seed(self.seed)
-            if torch.cuda.is_available():
-                torch.cuda.manual_seed_all(self.seed)
+        self._seed_rngs()
 
         best: AttackResult | None = None
         for restart in range(self.random_restarts):
-            delta = torch.empty_like(x0).uniform_(-self.epsilon, self.epsilon)
-            delta = torch.clamp(x0 + delta, self.clip_min, self.clip_max) - x0
-            delta.requires_grad_(True)
-
-            eta = _APGD_ETA_INIT_MULTIPLIER * self.epsilon
-            x_prev = (x0 + delta).detach().clone()
-            x_best = x_prev.clone()
-            loss_best = float("inf")
-            loss_prev = float("inf")
-            loss_traj: list[float] = []
-            success_count = 0
-            loss_at_last_ckpt = float("inf")
-            eta_at_last_ckpt = eta
-            ckpt_idx = 0
-
-            for step in range(self.steps):
-                loss = loss_fn(vlm, x0 + delta, prompt_tokens, target, gen_kwargs)
-                loss_val = float(loss.detach().cpu())
-                loss_traj.append(loss_val)
-
-                if loss_val < loss_best:
-                    loss_best = loss_val
-                    x_best = (x0 + delta).detach().clone()
-                # ρ_w (Croce-Hein 2020): success counts strict step-over-step
-                # improvement within the current checkpoint window, not
-                # improvement over the running best.
-                if _step_is_improvement(loss_val, loss_prev):
-                    success_count += 1
-                loss_prev = loss_val
-
-                grad = torch.autograd.grad(loss, delta, retain_graph=False)[0]
-
-                with torch.no_grad():
-                    z = x0 + delta + step_sign * eta * grad.sign()
-                    z = torch.clamp(z, x0 - self.epsilon, x0 + self.epsilon)
-                    z = torch.clamp(z, self.clip_min, self.clip_max)
-                    x_new = (
-                        (x0 + delta)
-                        + self.momentum * (z - (x0 + delta))
-                        + (1.0 - self.momentum) * ((x0 + delta) - x_prev)
-                    )
-                    x_new = torch.clamp(x_new, x0 - self.epsilon, x0 + self.epsilon)
-                    x_new = torch.clamp(x_new, self.clip_min, self.clip_max)
-                    x_prev = (x0 + delta).detach().clone()
-                    delta_data = (x_new - x0).detach()
-                    delta.copy_(delta_data)
-                    delta.grad = None
-
-                if ckpt_idx < len(checkpoints) and (step + 1) == checkpoints[ckpt_idx]:
-                    window = checkpoints[ckpt_idx] - (
-                        checkpoints[ckpt_idx - 1] if ckpt_idx > 0 else 0
-                    )
-                    if _checkpoint_triggered(
-                        success_count, window, self.rho,
-                        eta, eta_at_last_ckpt, loss_best, loss_at_last_ckpt,
-                    ):
-                        with torch.no_grad():
-                            eta = max(eta / _APGD_ETA_INIT_MULTIPLIER, _APGD_ETA_FLOOR)
-                            delta_data = (x_best - x0).detach()
-                            delta.copy_(delta_data)
-                            delta.grad = None
-                            x_prev = x_best.clone()
-                    eta_at_last_ckpt = eta
-                    loss_at_last_ckpt = loss_best
-                    success_count = 0
-                    ckpt_idx += 1
-
-            perturbed = torch.clamp(x_best, self.clip_min, self.clip_max)
-            candidate = AttackResult(
-                perturbed_image=perturbed.squeeze(0) if perturbed.shape[0] == 1 else perturbed,
-                delta=(perturbed - x0).squeeze(0) if perturbed.shape[0] == 1 else (perturbed - x0),
-                loss_final=loss_best,
-                loss_trajectory=loss_traj,
-                iterations=self.steps,
-                success=math.isfinite(loss_best),
-                metadata={
-                    "restart": restart,
-                    "epsilon": self.epsilon,
-                    "eta_final": eta,
-                    "targeted": self.targeted,
-                    "checkpoints": checkpoints,
-                },
+            candidate = self._one_restart(
+                vlm, x0, prompt_tokens, target,
+                loss_fn, gen_kwargs, checkpoints, step_sign, restart,
             )
             if best is None or candidate.loss_final < best.loss_final:
                 best = candidate
 
         assert best is not None
         return best
+
+    def _seed_rngs(self) -> None:
+        if self.seed is not None:
+            torch.manual_seed(self.seed)
+            if torch.cuda.is_available():
+                torch.cuda.manual_seed_all(self.seed)
+
+    def _zero_epsilon_result(self, x0: torch.Tensor) -> AttackResult:
+        """ε=0 ⇒ no admissible perturbation; skip the inner loop. Same
+        rationale as ``linf_pgd_loop`` short-circuit."""
+        zero_delta = torch.zeros_like(x0)
+        perturbed = torch.clamp(x0, self.clip_min, self.clip_max)
+        return AttackResult(
+            perturbed_image=perturbed.squeeze(0) if perturbed.shape[0] == 1 else perturbed,
+            delta=zero_delta.squeeze(0) if zero_delta.shape[0] == 1 else zero_delta,
+            loss_final=float("nan"),
+            loss_trajectory=[],
+            iterations=0,
+            success=False,
+            metadata={
+                "epsilon": self.epsilon,
+                "targeted": self.targeted,
+                "short_circuit": "epsilon_zero",
+            },
+        )
+
+    def _init_restart_state(self, x0: torch.Tensor) -> _ApgdLoopState:
+        delta = torch.empty_like(x0).uniform_(-self.epsilon, self.epsilon)
+        delta = torch.clamp(x0 + delta, self.clip_min, self.clip_max) - x0
+        delta.requires_grad_(True)
+        eta = _APGD_ETA_INIT_MULTIPLIER * self.epsilon
+        x_prev = (x0 + delta).detach().clone()
+        return _ApgdLoopState(
+            delta=delta,
+            eta=eta,
+            x_prev=x_prev,
+            x_best=x_prev.clone(),
+            loss_best=float("inf"),
+            loss_prev=float("inf"),
+            success_count=0,
+            loss_at_last_ckpt=float("inf"),
+            eta_at_last_ckpt=eta,
+            ckpt_idx=0,
+        )
+
+    def _one_restart(
+        self,
+        vlm: Any,
+        x0: torch.Tensor,
+        prompt_tokens: torch.Tensor,
+        target: torch.Tensor,
+        loss_fn: TokenTargetLoss,
+        gen_kwargs: dict[str, Any],
+        checkpoints: list[int],
+        step_sign: float,
+        restart: int,
+    ) -> AttackResult:
+        state = self._init_restart_state(x0)
+        for step in range(self.steps):
+            self._apgd_step(
+                vlm, x0, prompt_tokens, target, loss_fn, gen_kwargs,
+                state, step_sign, step, checkpoints,
+            )
+
+        perturbed = torch.clamp(state.x_best, self.clip_min, self.clip_max)
+        delta_final = perturbed - x0
+        return AttackResult(
+            perturbed_image=perturbed.squeeze(0) if perturbed.shape[0] == 1 else perturbed,
+            delta=delta_final.squeeze(0) if perturbed.shape[0] == 1 else delta_final,
+            loss_final=state.loss_best,
+            loss_trajectory=state.loss_traj,
+            iterations=self.steps,
+            success=math.isfinite(state.loss_best),
+            metadata={
+                "restart": restart,
+                "epsilon": self.epsilon,
+                "eta_final": state.eta,
+                "targeted": self.targeted,
+                "checkpoints": checkpoints,
+            },
+        )
+
+    def _apgd_step(
+        self,
+        vlm: Any,
+        x0: torch.Tensor,
+        prompt_tokens: torch.Tensor,
+        target: torch.Tensor,
+        loss_fn: TokenTargetLoss,
+        gen_kwargs: dict[str, Any],
+        state: _ApgdLoopState,
+        step_sign: float,
+        step: int,
+        checkpoints: list[int],
+    ) -> None:
+        loss = loss_fn(vlm, x0 + state.delta, prompt_tokens, target, gen_kwargs)
+        loss_val = float(loss.detach().cpu())
+        state.loss_traj.append(loss_val)
+
+        if loss_val < state.loss_best:
+            state.loss_best = loss_val
+            state.x_best = (x0 + state.delta).detach().clone()
+        # ρ_w (Croce-Hein 2020): success counts strict step-over-step
+        # improvement within the current checkpoint window.
+        if _step_is_improvement(loss_val, state.loss_prev):
+            state.success_count += 1
+        state.loss_prev = loss_val
+
+        grad = torch.autograd.grad(loss, state.delta, retain_graph=False)[0]
+        state.x_prev = self._apply_momentum_update(
+            x0, state.delta, grad, state.eta, state.x_prev, step_sign,
+        )
+        self._maybe_halve_step_size(state, x0, step, checkpoints)
+
+    def _apply_momentum_update(
+        self,
+        x0: torch.Tensor,
+        delta: torch.Tensor,
+        grad: torch.Tensor,
+        eta: float,
+        x_prev: torch.Tensor,
+        step_sign: float,
+    ) -> torch.Tensor:
+        with torch.no_grad():
+            z = x0 + delta + step_sign * eta * grad.sign()
+            z = torch.clamp(z, x0 - self.epsilon, x0 + self.epsilon)
+            z = torch.clamp(z, self.clip_min, self.clip_max)
+            x_new = (
+                (x0 + delta)
+                + self.momentum * (z - (x0 + delta))
+                + (1.0 - self.momentum) * ((x0 + delta) - x_prev)
+            )
+            x_new = torch.clamp(x_new, x0 - self.epsilon, x0 + self.epsilon)
+            x_new = torch.clamp(x_new, self.clip_min, self.clip_max)
+            new_x_prev = (x0 + delta).detach().clone()
+            delta_data = (x_new - x0).detach()
+            delta.copy_(delta_data)
+            delta.grad = None
+        return new_x_prev
+
+    def _maybe_halve_step_size(
+        self,
+        state: _ApgdLoopState,
+        x0: torch.Tensor,
+        step: int,
+        checkpoints: list[int],
+    ) -> None:
+        if state.ckpt_idx >= len(checkpoints) or (step + 1) != checkpoints[state.ckpt_idx]:
+            return
+        window = checkpoints[state.ckpt_idx] - (
+            checkpoints[state.ckpt_idx - 1] if state.ckpt_idx > 0 else 0
+        )
+        if _checkpoint_triggered(
+            state.success_count, window, self.rho,
+            state.eta, state.eta_at_last_ckpt,
+            state.loss_best, state.loss_at_last_ckpt,
+        ):
+            with torch.no_grad():
+                state.eta = max(state.eta / _APGD_ETA_INIT_MULTIPLIER, _APGD_ETA_FLOOR)
+                delta_data = (state.x_best - x0).detach()
+                state.delta.copy_(delta_data)
+                state.delta.grad = None
+                state.x_prev = state.x_best.clone()
+        state.eta_at_last_ckpt = state.eta
+        state.loss_at_last_ckpt = state.loss_best
+        state.success_count = 0
+        state.ckpt_idx += 1

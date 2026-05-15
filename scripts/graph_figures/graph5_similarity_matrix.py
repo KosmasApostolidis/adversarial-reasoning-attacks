@@ -9,17 +9,11 @@ import numpy as np
 from ._common import C_NODE, OUT, _load
 
 
-def graph5_similarity_matrix() -> None:
-    from adversarial_reasoning.metrics.trajectory import trajectory_edit_distance
-
-    pgd_recs = _load("runs/pgd_smoke/records.jsonl")
-    noise_recs = {r["sample_id"]: r for r in _load("runs/smoke/records.jsonl")}
-
-    # Build (label, sequence) list per patient
-    [r["sample_id"].split("_p")[1] for r in pgd_recs]
+def _build_seq_list(
+    pgd_recs: list[dict], noise_recs: dict
+) -> tuple[list[tuple[str, list[str]]], list[str]]:
     all_seqs: list[tuple[str, list[str]]] = []
     all_labels: list[str] = []
-
     for r in pgd_recs:
         pid = r["sample_id"].split("_p")[1]
         nr = noise_recs.get(r["sample_id"])
@@ -27,42 +21,42 @@ def graph5_similarity_matrix() -> None:
         all_seqs.append((f"N·{pid}", nr["attacked"]["tool_sequence"] if nr else []))
         all_seqs.append((f"P·{pid}", r["attacked"]["tool_sequence"]))
         all_labels += [f"B·{pid}", f"N·{pid}", f"P·{pid}"]
+    return all_seqs, all_labels
+
+
+def _compute_distance_matrix(all_seqs: list[tuple[str, list[str]]]) -> np.ndarray:
+    from adversarial_reasoning.metrics.trajectory import trajectory_edit_distance
 
     n = len(all_seqs)
     mat = np.zeros((n, n))
     for i, (_, si) in enumerate(all_seqs):
         for j, (_, sj) in enumerate(all_seqs):
             mat[i, j] = trajectory_edit_distance(si, sj, normalize=True)
+    return mat
 
-    # Cluster by condition groups
-    fig, ax = plt.subplots(figsize=(11, 9))
-    cmap = cm.get_cmap("magma")
-    im = ax.imshow(mat, cmap=cmap, vmin=0, vmax=1, aspect="auto")
 
-    labels = [lbl for lbl, _ in all_seqs]
-    ax.set_xticks(range(n))
-    ax.set_yticks(range(n))
-    ax.set_xticklabels(labels, rotation=45, ha="right", fontsize=8.5)
-    ax.set_yticklabels(labels, fontsize=8.5)
-
-    # Annotate cells
+def _annotate_cells(ax, mat: np.ndarray, n: int) -> None:
     for i in range(n):
         for j in range(n):
             v = mat[i, j]
             tcolor = "white" if v > 0.5 else "#cccccc"
             ax.text(j, i, f"{v:.2f}", ha="center", va="center", fontsize=7, color=tcolor)
 
+
+def _decorate_heatmap(fig, ax, im, n_patients: int, labels: list[str]) -> None:
+    n = len(labels)
+    ax.set_xticks(range(n))
+    ax.set_yticks(range(n))
+    ax.set_xticklabels(labels, rotation=45, ha="right", fontsize=8.5)
+    ax.set_yticklabels(labels, fontsize=8.5)
     # Draw group separators every 3 rows/cols
-    for k in range(1, len(pgd_recs)):
+    for k in range(1, n_patients):
         ax.axhline(k * 3 - 0.5, color="#30363d", lw=1.5)
         ax.axvline(k * 3 - 0.5, color="#30363d", lw=1.5)
-
     cb = fig.colorbar(im, ax=ax, fraction=0.035, pad=0.02)
     cb.set_label("Normalised edit distance", fontsize=10, color=C_NODE)
     cb.ax.yaxis.set_tick_params(color="#8b949e")
     plt.setp(cb.ax.yaxis.get_ticklabels(), color="#8b949e")
-
-    # Legend for condition codes
     legend_txt = "B = benign  ·  N = noise-attacked  ·  P = PGD-attacked"
     ax.set_title(
         f"Pairwise trajectory edit-distance matrix (all conditions, n=5 patients)\n{legend_txt}",
@@ -71,6 +65,27 @@ def graph5_similarity_matrix() -> None:
         color=C_NODE,
         pad=12,
     )
+
+
+def graph5_similarity_matrix() -> None:
+    pgd_recs = _load("runs/pgd_smoke/records.jsonl")
+    noise_recs = {r["sample_id"]: r for r in _load("runs/smoke/records.jsonl")}
+
+    # Build (label, sequence) list per patient
+    [r["sample_id"].split("_p")[1] for r in pgd_recs]
+    all_seqs, _all_labels = _build_seq_list(pgd_recs, noise_recs)
+
+    mat = _compute_distance_matrix(all_seqs)
+
+    # Cluster by condition groups
+    fig, ax = plt.subplots(figsize=(11, 9))
+    cmap = cm.get_cmap("magma")
+    im = ax.imshow(mat, cmap=cmap, vmin=0, vmax=1, aspect="auto")
+
+    labels = [lbl for lbl, _ in all_seqs]
+    _annotate_cells(ax, mat, len(all_seqs))
+    _decorate_heatmap(fig, ax, im, len(pgd_recs), labels)
+
     fig.savefig(OUT / "graph5_similarity_matrix.png")
     plt.close(fig)
     print("graph5 ✓")

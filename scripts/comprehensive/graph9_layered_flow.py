@@ -18,20 +18,7 @@ from ._common import (
 )
 
 
-def graph9_layered_flow():
-    pgd_r = load_records("runs/main/pgd/records.jsonl")
-
-    all_tools = sorted(
-        {t for r in pgd_r for key in ["benign", "attacked"] for t in r[key]["tool_sequence"]}
-    )
-    MAX_STEP = 7
-    tool_y = {t: i for i, t in enumerate(all_tools)}
-
-    fig, ax = plt.subplots(figsize=(16, 9))
-    fig.patch.set_facecolor(DARK_BG)
-    ax.set_facecolor(DARK_BG)
-
-    # For each patient and each condition, draw a path through step × tool space
+def _draw_patient_paths(ax, pgd_r, tool_y, max_step):
     for ri, rec in enumerate(pgd_r):
         offset = (ri - 2) * 0.12  # vertical jitter per patient
 
@@ -39,17 +26,18 @@ def graph9_layered_flow():
             (rec["benign"]["tool_sequence"], C_BENIGN, 2.0, 0.75, "-"),
             (rec["attacked"]["tool_sequence"], C_PGD, 2.0, 0.75, "--"),
         ]:
-            xs = list(range(min(len(seq), MAX_STEP)))
+            xs = list(range(min(len(seq), max_step)))
             ys = [tool_y[seq[s]] + offset for s in xs]
             ax.plot(xs, ys, color=c, lw=lw, alpha=alpha, linestyle=ls, zorder=3)
             ax.scatter(xs, ys, s=60, color=c, edgecolors="white", lw=0.7, zorder=5, alpha=0.9)
 
-    # Vertical grid lines per step
-    for s in range(MAX_STEP):
+
+def _decorate_axes(ax, all_tools, max_step):
+    for s in range(max_step):
         ax.axvline(s, color=DARK_GRID, lw=0.8, zorder=1)
 
-    ax.set_xticks(range(MAX_STEP))
-    ax.set_xticklabels([f"Step {i + 1}" for i in range(MAX_STEP)], fontsize=10, color=DARK_FG)
+    ax.set_xticks(range(max_step))
+    ax.set_xticklabels([f"Step {i + 1}" for i in range(max_step)], fontsize=10, color=DARK_FG)
     ax.set_yticks(range(len(all_tools)))
     ax.set_yticklabels([_s(t) for t in all_tools], fontsize=9.5, color=DARK_FG)
     ax.set_xlabel("Trajectory step", fontsize=11, color=DARK_FG)
@@ -57,10 +45,11 @@ def graph9_layered_flow():
     ax.tick_params(colors=DARK_FG)
     for sp in ax.spines.values():
         sp.set_color(DARK_GRID)
-    ax.set_xlim(-0.4, MAX_STEP - 0.6)
+    ax.set_xlim(-0.4, max_step - 0.6)
     ax.set_ylim(-0.8, len(all_tools) - 0.2)
 
-    # Legend
+
+def _draw_legend_and_title(ax):
     handles = [
         mpatches.Patch(color=C_BENIGN, label="Benign trajectory"),
         mpatches.Patch(color=C_PGD, label="PGD-attacked trajectory"),
@@ -81,6 +70,25 @@ def graph9_layered_flow():
         color=DARK_FG,
         pad=12,
     )
+
+
+def graph9_layered_flow():
+    pgd_r = load_records("runs/main/pgd/records.jsonl")
+
+    all_tools = sorted(
+        {t for r in pgd_r for key in ["benign", "attacked"] for t in r[key]["tool_sequence"]}
+    )
+    MAX_STEP = 7
+    tool_y = {t: i for i, t in enumerate(all_tools)}
+
+    fig, ax = plt.subplots(figsize=(16, 9))
+    fig.patch.set_facecolor(DARK_BG)
+    ax.set_facecolor(DARK_BG)
+
+    _draw_patient_paths(ax, pgd_r, tool_y, MAX_STEP)
+    _decorate_axes(ax, all_tools, MAX_STEP)
+    _draw_legend_and_title(ax)
+
     fig.savefig(GRAPH_OUT / "graph9_layered_flow.png", bbox_inches="tight", facecolor=DARK_BG)
     plt.close(fig)
     print("graph9 ✓")

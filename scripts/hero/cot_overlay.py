@@ -8,6 +8,7 @@ they corrupt in the tool sequence ("silent CoT corruption" zones).
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
 
 import matplotlib.pyplot as plt
@@ -29,27 +30,17 @@ from ._common import (
 )
 
 
-def fig_cot_overlay(by_attack, out_path: Path) -> None:
-    """Pair plot. No-op if no CoT data is present anywhere."""
-    if not has_cot(by_attack):
-        print("[cot_overlay] no cot_drift_score in records — skipping")
-        return
+@dataclass(frozen=True)
+class _PairedStats:
+    ed_means: list[float]
+    ed_lo: list[float]
+    ed_hi: list[float]
+    dr_means: list[float]
+    dr_lo: list[float]
+    dr_hi: list[float]
 
-    attacks = [a for a in ATTACK_ORDER if by_attack.get(a)]
-    n = len(attacks)
-    if n == 0:
-        return
 
-    fig = plt.figure(figsize=(12, 6.0))
-    fig.patch.set_facecolor(BG)
-    ax = fig.add_axes([0.10, 0.20, 0.85, 0.62])
-    ax.set_facecolor(PANEL)
-    ax.grid(axis="y", color=GRID, linewidth=0.6, alpha=0.4)
-    ax.set_axisbelow(True)
-
-    width = 0.36
-    x = np.arange(n)
-
+def _compute_paired_stats(attacks: list[str], by_attack: dict) -> _PairedStats:
     ed_means, ed_lo, ed_hi, dr_means, dr_lo, dr_hi = [], [], [], [], [], []
     for a in attacks:
         recs = by_attack[a]
@@ -64,10 +55,13 @@ def fig_cot_overlay(by_attack, out_path: Path) -> None:
         lo, hi = bootstrap_ci(d) if d.size else (0.0, 0.0)
         dr_lo.append(dr_means[-1] - lo)
         dr_hi.append(hi - dr_means[-1])
+    return _PairedStats(ed_means, ed_lo, ed_hi, dr_means, dr_lo, dr_hi)
 
+
+def _draw_paired_bars(ax, x, width: float, attacks: list[str], stats: _PairedStats):
     bars_ed = ax.bar(
         x - width / 2,
-        ed_means,
+        stats.ed_means,
         width=width,
         color=[PALETTE[a] for a in attacks],
         edgecolor=GRID,
@@ -76,7 +70,7 @@ def fig_cot_overlay(by_attack, out_path: Path) -> None:
     )
     bars_dr = ax.bar(
         x + width / 2,
-        dr_means,
+        stats.dr_means,
         width=width,
         color=[PALETTE[a] for a in attacks],
         edgecolor=TEXT,
@@ -86,28 +80,32 @@ def fig_cot_overlay(by_attack, out_path: Path) -> None:
         label="CoT drift (reasoning)",
     )
     ax.errorbar(
-        x - width / 2, ed_means, yerr=[ed_lo, ed_hi],
+        x - width / 2, stats.ed_means, yerr=[stats.ed_lo, stats.ed_hi],
         fmt="none", ecolor=TEXT_MUTED, elinewidth=0.9, capsize=3,
     )
     ax.errorbar(
-        x + width / 2, dr_means, yerr=[dr_lo, dr_hi],
+        x + width / 2, stats.dr_means, yerr=[stats.dr_lo, stats.dr_hi],
         fmt="none", ecolor=TEXT_MUTED, elinewidth=0.9, capsize=3,
     )
+    return bars_ed, bars_dr
 
-    for rect, val in zip(bars_ed, ed_means, strict=True):
+
+def _annotate_bars(ax, bars_ed, bars_dr, stats: _PairedStats) -> None:
+    for rect, val in zip(bars_ed, stats.ed_means, strict=True):
         ax.text(rect.get_x() + rect.get_width() / 2, val + 0.015, f"{val:.2f}",
                 ha="center", color=TEXT, fontsize=9)
-    for rect, val in zip(bars_dr, dr_means, strict=True):
+    for rect, val in zip(bars_dr, stats.dr_means, strict=True):
         ax.text(rect.get_x() + rect.get_width() / 2, val + 0.015, f"{val:.2f}",
                 ha="center", color=TEXT, fontsize=9)
 
+
+def _decorate_axes_and_legend(ax, x, attacks: list[str]) -> None:
     ax.set_xticks(x)
     ax.set_xticklabels([LABELS[a] for a in attacks], color=TEXT, fontsize=10)
     ax.set_ylim(0, 1.05)
     ax.set_ylabel("Mean disruption (95% bootstrap CI)", color=TEXT_MUTED, fontsize=11)
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
-
     leg = ax.legend(
         loc="upper left",
         frameon=True,
@@ -118,6 +116,31 @@ def fig_cot_overlay(by_attack, out_path: Path) -> None:
     )
     for t in leg.get_texts():
         t.set_color(TEXT)
+
+
+def fig_cot_overlay(by_attack, out_path: Path) -> None:
+    """Pair plot. No-op if no CoT data is present anywhere."""
+    if not has_cot(by_attack):
+        print("[cot_overlay] no cot_drift_score in records — skipping")
+        return
+    attacks = [a for a in ATTACK_ORDER if by_attack.get(a)]
+    n = len(attacks)
+    if n == 0:
+        return
+
+    fig = plt.figure(figsize=(12, 6.0))
+    fig.patch.set_facecolor(BG)
+    ax = fig.add_axes([0.10, 0.20, 0.85, 0.62])
+    ax.set_facecolor(PANEL)
+    ax.grid(axis="y", color=GRID, linewidth=0.6, alpha=0.4)
+    ax.set_axisbelow(True)
+
+    width = 0.36
+    x = np.arange(n)
+    stats = _compute_paired_stats(attacks, by_attack)
+    bars_ed, bars_dr = _draw_paired_bars(ax, x, width, attacks, stats)
+    _annotate_bars(ax, bars_ed, bars_dr, stats)
+    _decorate_axes_and_legend(ax, x, attacks)
 
     fig.text(0.06, 0.91, "TOOLS vs REASONING DISRUPTION", color=TEXT, fontsize=22, fontweight="bold")
     fig.text(

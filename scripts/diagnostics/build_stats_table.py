@@ -177,6 +177,34 @@ COT_METRICS: tuple[tuple[str, MetricExtractor], ...] = (
 )
 
 
+def _safe_pvalue(
+    benign: np.ndarray, attacked: np.ndarray, cell_key: CellKey
+) -> tuple[float, str]:
+    # Distinguish three p-value outcomes: clean compute (ok), scipy
+    # raised ValueError (e.g. all-zero diffs), or scipy returned NaN.
+    # All three previously collapsed to pvalue=1.0 silently.
+    pvalue_status = "ok"
+    try:
+        wlx = wilcoxon_signed_rank(benign, attacked)
+        pvalue = wlx.pvalue
+    except ValueError as exc:
+        logger.warning(
+            "wilcoxon_signed_rank ValueError for cell=%s: %s — pvalue→1.0",
+            cell_key,
+            exc,
+        )
+        pvalue = 1.0
+        pvalue_status = "valuerror"
+    if not np.isfinite(pvalue):
+        logger.warning(
+            "wilcoxon_signed_rank returned non-finite pvalue for cell=%s — pvalue→1.0",
+            cell_key,
+        )
+        pvalue = 1.0
+        pvalue_status = "nan"
+    return float(pvalue), pvalue_status
+
+
 def _stats_per_cell(
     cells: dict[CellKey, dict[str, list[float]]],
     *,
@@ -198,28 +226,7 @@ def _stats_per_cell(
             ci_level=ci_level,
             rng_seed=bootstrap_seed,
         )
-        # Distinguish three p-value outcomes: clean compute (ok), scipy
-        # raised ValueError (e.g. all-zero diffs), or scipy returned NaN.
-        # All three previously collapsed to pvalue=1.0 silently.
-        pvalue_status = "ok"
-        try:
-            wlx = wilcoxon_signed_rank(benign, attacked)
-            pvalue = wlx.pvalue
-        except ValueError as exc:
-            logger.warning(
-                "wilcoxon_signed_rank ValueError for cell=%s: %s — pvalue→1.0",
-                cell_key,
-                exc,
-            )
-            pvalue = 1.0
-            pvalue_status = "valuerror"
-        if not np.isfinite(pvalue):
-            logger.warning(
-                "wilcoxon_signed_rank returned non-finite pvalue for cell=%s — pvalue→1.0",
-                cell_key,
-            )
-            pvalue = 1.0
-            pvalue_status = "nan"
+        pvalue, pvalue_status = _safe_pvalue(benign, attacked, cell_key)
         model, task, attack, eps = cell_key
         rows.append(
             {
@@ -231,7 +238,7 @@ def _stats_per_cell(
                 "median_delta": float(np.median(delta)),
                 "ci_lower": float(ci.lower),
                 "ci_upper": float(ci.upper),
-                "pvalue": float(pvalue),
+                "pvalue": pvalue,
                 "pvalue_status": pvalue_status,
             }
         )
@@ -333,6 +340,31 @@ def _annotate_attacked_rate(rows: list[dict], cells: dict[CellKey, dict[str, lis
         r["attacked_rate"] = float(np.mean(atk)) if atk else 0.0
 
 
+def _build_cot_metric_rows(
+    metric_name: str,
+    extractor: MetricExtractor,
+    attacked_records: list[dict],
+    *,
+    n_resamples: int,
+    ci_level: float,
+    q: float,
+    bootstrap_seed: int | None,
+) -> list[dict]:
+    cells = _build_cells_for_metric(attacked_records, extractor)
+    if not cells:
+        return []
+    rows = _stats_per_cell(
+        cells,
+        n_resamples=n_resamples,
+        ci_level=ci_level,
+        bootstrap_seed=bootstrap_seed,
+    )
+    _apply_bh(rows, q=q)
+    if metric_name == "refusal":
+        _annotate_attacked_rate(rows, cells)
+    return rows
+
+
 def build_cot_table(
     runs_dir: Path,
     out_path: Path,
@@ -356,30 +388,14 @@ def build_cot_table(
         sys.stderr.write("[build_cot_table] no non-noise records — abort\n")
         return 1
 
-    rows_by_metric: dict[str, list[dict]] = {}
-    any_rows = False
-    for metric_name, extractor in COT_METRICS:
-        cells = _build_cells_for_metric(attacked_records, extractor)
-        if not cells:
-            rows_by_metric[metric_name] = []
-            continue
-        rows = _stats_per_cell(
-            cells,
-            n_resamples=n_resamples,
-            ci_level=ci_level,
-            bootstrap_seed=bootstrap_seed,
-        )
-        _apply_bh(rows, q=q)
-        if metric_name == "refusal":
-            _annotate_attacked_rate(rows, cells)
-        rows_by_metric[metric_name] = rows
-        if rows:
-            any_rows = True
+    rows_by_metric: dict[str, list[dict]] = {
+        m: _build_cot_metric_rows(m, ex, attacked_records, n_resamples=n_resamples,
+                                   ci_level=ci_level, q=q, bootstrap_seed=bootstrap_seed)
+        for m, ex in COT_METRICS
+    }
 
-    if not any_rows:
-        sys.stderr.write(
-            "[build_cot_table] no records contained CoT metrics — skip\n"
-        )
+    if not any(rows_by_metric.values()):
+        sys.stderr.write("[build_cot_table] no records contained CoT metrics — skip\n")
         return 1
 
     _emit_cot_latex(rows_by_metric, out_path)

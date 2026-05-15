@@ -124,6 +124,56 @@ def _write_csv(
         w.writerows(rows)
 
 
+def _compute_panel_data(
+    per_fold: dict[tuple[str, str, str], tuple[float, float, int]],
+    model: str,
+    attacks: list[str],
+) -> tuple[list[float], list[float], list[float], list[float]]:
+    b_heights, a_heights, b_errs, a_errs = [], [], [], []
+    for attack in attacks:
+        agg = _avg_across_folds(per_fold, model=model, attack=attack)
+        if agg is None:
+            b_heights.append(0.0)
+            a_heights.append(0.0)
+            b_errs.append(0.0)
+            a_errs.append(0.0)
+            continue
+        b_mean, a_mean, b_std, a_std, _ = agg
+        b_heights.append(b_mean)
+        a_heights.append(a_mean)
+        b_errs.append(b_std)
+        a_errs.append(a_std)
+    return b_heights, a_heights, b_errs, a_errs
+
+
+def _draw_one_panel(
+    ax,
+    model: str,
+    x: list[int],
+    bar_w: float,
+    attacks: list[str],
+    col: int,
+    heights_and_errs: tuple[list[float], list[float], list[float], list[float]],
+) -> None:
+    b_heights, a_heights, b_errs, a_errs = heights_and_errs
+    ax.bar(
+        [xi - bar_w / 2 for xi in x], b_heights, width=bar_w, yerr=b_errs,
+        capsize=3, color="#4c78a8", label="benign",
+    )
+    ax.bar(
+        [xi + bar_w / 2 for xi in x], a_heights, width=bar_w, yerr=a_errs,
+        capsize=3, color="#e45756", label="attacked",
+    )
+    ax.set_xticks(x)
+    ax.set_xticklabels(attacks, rotation=20, ha="right")
+    ax.set_title(model, fontsize=11)
+    if col == 0:
+        ax.set_ylabel("mean tool calls per trajectory")
+    ax.grid(axis="y", linestyle=":", alpha=0.5)
+    despine(ax)
+    panel_label(ax, "abcdefg"[col])
+
+
 def _plot(
     per_fold: dict[tuple[str, str, str], tuple[float, float, int]],
     *,
@@ -140,48 +190,8 @@ def _plot(
     x = list(range(len(attacks)))
 
     for col, model in enumerate(models):
-        ax = axes[col]
-        b_heights, a_heights, b_errs, a_errs = [], [], [], []
-        for attack in attacks:
-            agg = _avg_across_folds(per_fold, model=model, attack=attack)
-            if agg is None:
-                b_heights.append(0.0)
-                a_heights.append(0.0)
-                b_errs.append(0.0)
-                a_errs.append(0.0)
-                continue
-            b_mean, a_mean, b_std, a_std, _ = agg
-            b_heights.append(b_mean)
-            a_heights.append(a_mean)
-            b_errs.append(b_std)
-            a_errs.append(a_std)
-
-        ax.bar(
-            [xi - bar_w / 2 for xi in x],
-            b_heights,
-            width=bar_w,
-            yerr=b_errs,
-            capsize=3,
-            color="#4c78a8",
-            label="benign",
-        )
-        ax.bar(
-            [xi + bar_w / 2 for xi in x],
-            a_heights,
-            width=bar_w,
-            yerr=a_errs,
-            capsize=3,
-            color="#e45756",
-            label="attacked",
-        )
-        ax.set_xticks(x)
-        ax.set_xticklabels(attacks, rotation=20, ha="right")
-        ax.set_title(model, fontsize=11)
-        if col == 0:
-            ax.set_ylabel("mean tool calls per trajectory")
-        ax.grid(axis="y", linestyle=":", alpha=0.5)
-        despine(ax)
-        panel_label(ax, "abcdefg"[col])
+        heights_and_errs = _compute_panel_data(per_fold, model, attacks)
+        _draw_one_panel(axes[col], model, x, bar_w, attacks, col, heights_and_errs)
 
     if axes.size > 0:
         axes[-1].legend(loc="upper right", frameon=False)

@@ -18,32 +18,19 @@ from ._common import (
 )
 
 
-def fig1_main_result() -> None:
-    noise_recs = load_records("runs/main/noise/records.jsonl")
-    pgd_recs = load_records("runs/main/pgd/records.jsonl")
-    sweep_recs = [
-        r
-        for r in load_records("runs/main/noise/records.jsonl")
-        if "qwen" in r.get("model_id", "").lower()
-    ]
-
-    nd = np.array([r["edit_distance_norm"] for r in noise_recs])
-    pd_ = np.array([r["edit_distance_norm"] for r in pgd_recs])
-    eps = pgd_recs[0]["epsilon"]
-
-    # ε-sweep
+def _compute_eps_sweep(
+    sweep_recs: list[dict],
+) -> tuple[list[float], list[float], list[float]]:
     per_eps: dict[float, list[float]] = defaultdict(list)
     for r in sweep_recs:
         per_eps[r["epsilon"]].append(r["edit_distance_norm"])
     eps_sorted = sorted(per_eps)
     means = [np.mean(per_eps[e]) for e in eps_sorted]
     stds = [np.std(per_eps[e], ddof=1) if len(per_eps[e]) > 1 else 0 for e in eps_sorted]
+    return eps_sorted, means, stds
 
-    fig, axes = plt.subplots(1, 3, figsize=(13, 4.2))
-    fig.subplots_adjust(wspace=0.38)
 
-    # Panel A — boxplot
-    ax = axes[0]
+def _draw_panel_a_box(ax, nd: np.ndarray, pd_: np.ndarray, eps: float) -> None:
     bp = ax.boxplot(
         [nd, pd_],
         tick_labels=["Uniform\nnoise", "PGD-L∞\n(20 steps)"],
@@ -76,10 +63,11 @@ def fig1_main_result() -> None:
     ax.set_ylim(bottom=0)
     ax.yaxis.set_minor_locator(mticker.AutoMinorLocator())
     despine(ax)
-    _panel_label(ax, "A")
 
-    # Panel B — per-sample grouped bars
-    ax = axes[1]
+
+def _draw_panel_b_bars(
+    ax, pgd_recs: list[dict], nd: np.ndarray, pd_: np.ndarray
+) -> None:
     n = len(pgd_recs)
     x = np.arange(n)
     w = 0.35
@@ -94,10 +82,11 @@ def fig1_main_result() -> None:
     ax.legend(loc="upper left")
     ax.set_ylim(bottom=0)
     despine(ax)
-    _panel_label(ax, "B")
 
-    # Panel C — ε-sweep
-    ax = axes[2]
+
+def _draw_panel_c_eps(
+    ax, eps_sorted: list[float], means: list[float], stds: list[float]
+) -> None:
     ax.errorbar(
         [e * 255 for e in eps_sorted],
         means,
@@ -117,7 +106,33 @@ def fig1_main_result() -> None:
     ax.set_xticklabels(["2", "4", "8", "16"])
     ax.legend()
     despine(ax)
-    _panel_label(ax, "C")
+
+
+def fig1_main_result() -> None:
+    noise_recs = load_records("runs/main/noise/records.jsonl")
+    pgd_recs = load_records("runs/main/pgd/records.jsonl")
+    sweep_recs = [
+        r
+        for r in load_records("runs/main/noise/records.jsonl")
+        if "qwen" in r.get("model_id", "").lower()
+    ]
+
+    nd = np.array([r["edit_distance_norm"] for r in noise_recs])
+    pd_ = np.array([r["edit_distance_norm"] for r in pgd_recs])
+    eps = pgd_recs[0]["epsilon"]
+    eps_sorted, means, stds = _compute_eps_sweep(sweep_recs)
+
+    fig, axes = plt.subplots(1, 3, figsize=(13, 4.2))
+    fig.subplots_adjust(wspace=0.38)
+
+    _draw_panel_a_box(axes[0], nd, pd_, eps)
+    _panel_label(axes[0], "A")
+
+    _draw_panel_b_bars(axes[1], pgd_recs, nd, pd_)
+    _panel_label(axes[1], "B")
+
+    _draw_panel_c_eps(axes[2], eps_sorted, means, stds)
+    _panel_label(axes[2], "C")
 
     fig.suptitle(
         "Adversarial perturbations alter VLM agent tool-call trajectories on prostate MRI",
