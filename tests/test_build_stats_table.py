@@ -168,38 +168,29 @@ def test_build_stats_table_is_deterministic_with_pinned_seed(tmp_path: Path) -> 
     )
 
 
+def _build_zero_delta_rows() -> list[dict]:
+    """Build noise+pgd rows that force scipy.wilcoxon onto a degenerate path."""
+    rows: list[dict] = []
+    for seed in range(5):
+        for sample_idx in range(4):
+            for mode, name in [("noise", "noise"), ("pgd", "pgd_linf")]:
+                rows.append(
+                    _record(
+                        model_key="m", task_id="t",
+                        attack_mode=mode, attack_name=name,
+                        epsilon=0.0157, seed=seed,
+                        sample_id=f"s{sample_idx}", edit_distance=0.1,
+                    )
+                )
+    return rows
+
+
 def test_stats_rows_carry_pvalue_status(tmp_path: Path) -> None:
     """Each row must report whether the Wilcoxon p-value was computed
     cleanly or fell back. Distinguishes 'truly non-significant' from
     'computation failed' — both previously collapsed to pvalue=1.0."""
     # Force all-zero deltas → Wilcoxon raises ValueError ("zero-method='wilcox' ... all zero")
-    rows: list[dict] = []
-    for seed in range(5):
-        for sample_idx in range(4):
-            rows.append(
-                _record(
-                    model_key="m",
-                    task_id="t",
-                    attack_mode="noise",
-                    attack_name="noise",
-                    epsilon=0.0157,
-                    seed=seed,
-                    sample_id=f"s{sample_idx}",
-                    edit_distance=0.1,
-                )
-            )
-            rows.append(
-                _record(
-                    model_key="m",
-                    task_id="t",
-                    attack_mode="pgd",
-                    attack_name="pgd_linf",
-                    epsilon=0.0157,
-                    seed=seed,
-                    sample_id=f"s{sample_idx}",
-                    edit_distance=0.1,
-                )
-            )
+    rows = _build_zero_delta_rows()
     runs_dir = tmp_path / "runs"
     _write_jsonl(
         runs_dir / "noise" / "records.jsonl", [r for r in rows if r["attack_mode"] == "noise"]

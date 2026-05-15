@@ -153,26 +153,12 @@ def test_build_attack_target_dispatch(
     assert called["fn"] == target_fn
 
 
-def test_run_gradient_attack_full_path(
-    monkeypatch: pytest.MonkeyPatch, dummy_image: Image.Image
-) -> None:
-    """Exercise the full run_gradient_attack body with stubbed torch/VLM/agent.
-
-    Validates that:
-      - prepare_attack_inputs is called and its tensors flow into the attack
-      - target builder is selected by mode
-      - perturbed pixel_values are reshaped/recasted and forwarded to the agent
-      - mode-specific metadata is written onto the attacked Trajectory
-    """
+def _make_targeted_tool_stubs(captured, pv, input_ids, attn):
+    """Build (StubVLM, StubAgent, StubAttack) tuple for targeted-tool path."""
     import torch
 
     from adversarial_reasoning.agents.base import Trajectory
     from adversarial_reasoning.attacks.base import AttackResult
-    from adversarial_reasoning.runner import attacks as runner_attacks
-
-    pv = torch.zeros(1, 3, 8, 8)
-    input_ids = torch.zeros(1, 4, dtype=torch.long)
-    attn = torch.ones(1, 4, dtype=torch.long)
 
     class StubVLM:
         def prepare_attack_inputs(self, image, prompt):
@@ -182,11 +168,6 @@ def test_run_gradient_attack_full_path(
                 "attention_mask": attn,
                 "image_grid_thw": torch.zeros(1, 3),  # extra Qwen-style kwarg
             }
-
-    benign = Trajectory(task_id="t", model_id="m", seed=0)
-    sample = type("S", (), {"image": dummy_image, "prompt": "?"})()
-
-    captured = {}
 
     class StubAgent:
         def run_with_pixel_values(
@@ -207,17 +188,39 @@ def test_run_gradient_attack_full_path(
                 iterations=2,
             )
 
+    return StubVLM, StubAgent, StubAttack
+
+
+def test_run_gradient_attack_full_path(
+    monkeypatch: pytest.MonkeyPatch, dummy_image: Image.Image
+) -> None:
+    """Exercise the full run_gradient_attack body with stubbed torch/VLM/agent.
+
+    Validates that:
+      - prepare_attack_inputs is called and its tensors flow into the attack
+      - target builder is selected by mode
+      - perturbed pixel_values are reshaped/recasted and forwarded to the agent
+      - mode-specific metadata is written onto the attacked Trajectory
+    """
+    import torch
+    from adversarial_reasoning.agents.base import Trajectory
+    from adversarial_reasoning.runner import attacks as runner_attacks
+
+    pv = torch.zeros(1, 3, 8, 8)
+    input_ids = torch.zeros(1, 4, dtype=torch.long)
+    attn = torch.ones(1, 4, dtype=torch.long)
+    captured: dict = {}
+    StubVLM, StubAgent, StubAttack = _make_targeted_tool_stubs(captured, pv, input_ids, attn)
     monkeypatch.setattr(runner_attacks, "build_attack", lambda *a, **kw: StubAttack())
-    monkeypatch.setattr(
-        runner_attacks, "target_from_tool", lambda *a, **kw: torch.zeros(1, 2, dtype=torch.long)
-    )
+    target_zero = torch.zeros(1, 2, dtype=torch.long)
+    monkeypatch.setattr(runner_attacks, "target_from_tool", lambda *a, **kw: target_zero)
 
     out = runner_attacks.run_gradient_attack(
         mode="targeted_tool",
         vlm=StubVLM(),
         agent=StubAgent(),  # type: ignore[arg-type]
-        sample=sample,
-        benign=benign,
+        sample=type("S", (), {"image": dummy_image, "prompt": "?"})(),
+        benign=Trajectory(task_id="t", model_id="m", seed=0),
         epsilon=0.01,
         steps=2,
         seed=7,
@@ -239,26 +242,16 @@ def test_run_gradient_attack_full_path(
     assert out.metadata["targeted_hit"] == 0  # stub agent has empty tool_sequence
 
 
-def test_run_gradient_attack_reshape_fallback(
-    monkeypatch: pytest.MonkeyPatch, dummy_image: Image.Image
-) -> None:
-    """When perturbed_pv has the same ndim as pv but a different shape (e.g.,
-    the attack loop returned a flat or transposed view), run_gradient_attack
-    must reshape it back to pv.shape rather than crash."""
+def _make_reshape_stubs(captured, pv, input_ids):
+    """Build (StubVLM, StubAgent, StubAttack) tuple for reshape-fallback path."""
     import torch
 
     from adversarial_reasoning.agents.base import Trajectory
     from adversarial_reasoning.attacks.base import AttackResult
-    from adversarial_reasoning.runner import attacks as runner_attacks
-
-    pv = torch.zeros(1, 3, 8, 8)
-    input_ids = torch.zeros(1, 4, dtype=torch.long)
 
     class StubVLM:
         def prepare_attack_inputs(self, image, prompt):
             return {"pixel_values": pv, "input_ids": input_ids}
-
-    captured = {}
 
     class StubAgent:
         def run_with_pixel_values(self, *, pixel_values, **kw):
@@ -275,6 +268,25 @@ def test_run_gradient_attack_reshape_fallback(
                 loss_final=0.0,
                 iterations=1,
             )
+
+    return StubVLM, StubAgent, StubAttack
+
+
+def test_run_gradient_attack_reshape_fallback(
+    monkeypatch: pytest.MonkeyPatch, dummy_image: Image.Image
+) -> None:
+    """When perturbed_pv has the same ndim as pv but a different shape (e.g.,
+    the attack loop returned a flat or transposed view), run_gradient_attack
+    must reshape it back to pv.shape rather than crash."""
+    import torch
+
+    from adversarial_reasoning.agents.base import Trajectory
+    from adversarial_reasoning.runner import attacks as runner_attacks
+
+    pv = torch.zeros(1, 3, 8, 8)
+    input_ids = torch.zeros(1, 4, dtype=torch.long)
+    captured: dict = {}
+    StubVLM, StubAgent, StubAttack = _make_reshape_stubs(captured, pv, input_ids)
 
     monkeypatch.setattr(runner_attacks, "build_attack", lambda *a, **kw: StubAttack())
     monkeypatch.setattr(
