@@ -32,6 +32,16 @@ def load_hf_vlm(model_name: str, config_path: str | Path = "configs/models.yaml"
             device_map=cfg.get("device_map", "auto"),
             revision=cfg.get("hf_revision", "main"),
         )
+    if family == "llava_onevision":
+        from .llava import LlavaNext
+
+        model = LlavaNext(
+            hf_id=cfg["hf_id"],
+            device_map=cfg.get("device_map", "auto"),
+            revision=cfg.get("hf_revision", "main"),
+        )
+        model.family = "llava_onevision"
+        return model
     if family == "internvl2":
         from .internvl2 import InternVL2
 

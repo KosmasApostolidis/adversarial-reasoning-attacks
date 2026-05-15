@@ -83,11 +83,16 @@ def load_runner_config(exp_path: str | Path) -> RunnerConfig:
     here = Path(exp_path).resolve()
     raw_full = _resolve_extends(_load_yaml(here), here=here)
     raw = raw_full.get("experiment", {})
+    # Resolve relative output_dir against the config file's directory so
+    # Path("..") in a YAML always resolves to the expected absolute path
+    # regardless of the CWD the runner is launched from.
+    out_dir_raw = raw.get("output_dir", "runs")
+    raw["output_dir"] = str((here.parent / Path(out_dir_raw)).resolve())
     if os.environ.get("_LEGACY_CONFIG_LOADER") == "1":
         return RunnerConfig(
             name=raw["name"],
             phase=str(raw.get("phase", "0")),
-            output_dir=Path(str(raw.get("output_dir", "runs"))),
+            output_dir=Path(raw["output_dir"]),
             seeds=list(raw.get("seeds", [0])),
             models=list(raw["models"]),
             tasks=list(raw["tasks"]),

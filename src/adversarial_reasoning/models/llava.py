@@ -1,7 +1,8 @@
-"""LLaVA-NeXT (v1.6 Mistral-7B) HF loader. Prompt-scaffolded tool calling via ReAct system prompt."""
+"""LLaVA-NeXT / LLaVA-OneVision HF loader. Prompt-scaffolded tool calling via ReAct system prompt."""
 
 from __future__ import annotations
 
+import logging
 from typing import Any, cast
 
 import torch
@@ -10,6 +11,7 @@ from PIL import Image
 from ..types import AttackInputs
 from .base import VLMBase, VLMGenerateResult
 
+_LOG = logging.getLogger(__name__)
 _MIN_TEMP: float = 1e-5  # temperature floor for generation kwargs
 
 
@@ -24,15 +26,20 @@ class LlavaNext(VLMBase):
         device_map: str = "auto",
         revision: str = "main",
     ) -> None:
-        from transformers import LlavaNextForConditionalGeneration, LlavaNextProcessor
+        from pathlib import Path as _Path
+
+        from transformers import AutoModelForVision2Seq, AutoProcessor
 
         self.model_id = hf_id
-        self.processor = LlavaNextProcessor.from_pretrained(hf_id, revision=revision)
-        self.model = LlavaNextForConditionalGeneration.from_pretrained(
+        from_pretrained_kwargs: dict[str, Any] = {}
+        if not _Path(hf_id).is_dir():
+            from_pretrained_kwargs["revision"] = revision
+        self.processor = AutoProcessor.from_pretrained(hf_id, **from_pretrained_kwargs)
+        self.model = AutoModelForVision2Seq.from_pretrained(
             hf_id,
             torch_dtype=torch_dtype,
             device_map=device_map,
-            revision=revision,
+            **from_pretrained_kwargs,
         )
         self.model.train(False)
         eos_id = self.processor.tokenizer.eos_token_id  # type: ignore[attr-defined]
@@ -73,12 +80,32 @@ class LlavaNext(VLMBase):
         return VLMGenerateResult(text=text_out, finish_reason="stop")
 
     def _format_prompt(self, prompt: str, tools_schema: list[dict] | None) -> str:
-        """LLaVA-NeXT Mistral template: `[INST] <image>\\n{system}\\n{user} [/INST]`.
-
-        Mistral-Instruct has no dedicated system role; bake ReAct tool instructions
-        into the [INST] block.
+        """Build chat prompt via HF ``apply_chat_template`` when available;
+        falls back to LLaVA-NeXT Mistral ``[INST]`` scaffold for older models.
         """
         system_block = self._build_system_prompt(tools_schema)
+        tokenizer = getattr(self.processor, "tokenizer", None)
+        if tokenizer is not None and hasattr(tokenizer, "apply_chat_template"):
+            messages: list[dict] = []
+            if system_block:
+                messages.append({"role": "system", "content": system_block})
+            messages.append({
+                "role": "user",
+                "content": [
+                    {"type": "image"},
+                    {"type": "text", "text": prompt},
+                ],
+            })
+            try:
+                return tokenizer.apply_chat_template(
+                    messages, tokenize=False, add_generation_prompt=True,
+                )
+            except (ValueError, TypeError) as exc:
+                _LOG.warning(
+                    "apply_chat_template failed (%s); falling back to "
+                    "LLaVA-NeXT Mistral [INST] scaffold",
+                    exc,
+                )
         body = f"{system_block}\n\n{prompt}" if system_block else prompt
         return f"[INST] <image>\n{body} [/INST]"
 

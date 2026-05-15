@@ -1,23 +1,23 @@
-# Phase 0e defended: adv-FT'd LLaVA-1.6-Mistral-7B under PGD-L∞ at the
+# Phase 2 defended: adv-FT'd Qwen3-VL-8B under PGD-L∞ at the
 # canonical T3 eval budget (4/255, 8/255). Pairs 1:1 with
-# baseline_llava.yaml on seed/task/attack/eps; only the model_key differs.
+# baseline_qwen3.yaml on seed/task/attack/eps; only the model_key differs.
 #
 # The checkpoint path is owned by configs/models.yaml under model_key
-# `defended_llava_v1_6_mistral_7b` (hf_dir produced by
+# `defended_qwen3_vl_8b` (hf_dir produced by
 # adversarial-reasoning-training/scripts/ckpt_to_hf_dir.py from the
-# Phase 0c best.pt). Re-export the hf_dir whenever Phase 0c reruns.
+# Phase 2 adv-FT best.pt). Re-export the hf_dir whenever adv-FT reruns.
 #
 # Output records.jsonl is consumed by:
 #   art-eval-robust --defended-records <records.jsonl>
 
 experiment:
-  name: phase0e_defended_llava
+  name: phase2_defended_qwen3
   phase: "0"
   seeds: [0]
-  output_dir: ../adversarial-reasoning-training/runs/llava_main_seed0
+  output_dir: ../adversarial-reasoning-training/runs/qwen3_main_seed0
 
   models:
-    - defended_llava_v1_6_mistral_7b
+    - defended_qwen3_vl_8b
 
   tasks:
     - prostate_mri_workup

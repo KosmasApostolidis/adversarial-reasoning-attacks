@@ -1,0 +1,28 @@
+# Phase 2 baseline: undefended LLaVA-OneVision-7B under PGD-L∞ at the
+# canonical T3 eval budget (4/255, 8/255). Pairs 1:1 with
+# defended_llava_ov.yaml on seed/task/attack/eps to make a valid Wilcoxon
+# signed-rank input for the T3 gate.
+#
+# Output records.jsonl is consumed by:
+#   art-eval-robust --baseline-records <records.jsonl>
+# in the adversarial-reasoning-training repo.
+
+experiment:
+  name: phase2_undefended_llava_ov
+  phase: "0"
+  seeds: [0]
+  output_dir: ../adversarial-reasoning-training/runs/undefended_llava_ov
+
+  models:
+    - llava_onevision_qwen2_7b
+
+  tasks:
+    - prostate_mri_workup
+    - rad_vqa_action
+    - prostate_mri_targeted
+
+  attacks:
+    - pgd_linf
+
+  # Canonical T3 eval suite (configs/defenses.yaml :: pgd.eval_eps).
+  epsilons_linf: [0.0157, 0.0314]

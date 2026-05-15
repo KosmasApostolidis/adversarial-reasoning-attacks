@@ -280,6 +280,7 @@ def _write_summary(
         "elapsed_s": elapsed,
         "records_path": str(records_path),
     }
+    out_dir.mkdir(parents=True, exist_ok=True)
     (out_dir / "summary.json").write_text(json.dumps(summary, indent=2))
     print(
         f"[runner] done. {n_records} record(s)"

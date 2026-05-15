@@ -1,152 +1,100 @@
-# Model registry. Phase-aware: Phase 0/1 uses 2 VLMs; Phase 2 adds InternVL2-8B.
+# Model registry — active lineup: Qwen3-VL-8B, LLaVA-OneVision-7B, InternVL3-8B.
 
 models:
-  qwen2_5_vl_7b:
+  qwen3_vl_8b:
     phase: ["0", "1", "2"]
     family: qwen_vl
-    hf_id: Qwen/Qwen2.5-VL-7B-Instruct
+    hf_id: Qwen/Qwen3-VL-8B-Instruct
     hf_revision: main
-    processor_id: Qwen/Qwen2.5-VL-7B-Instruct
-    ollama_tag: qwen2.5vl:7b-q4_K_M
-    torch_dtype: float16
-    device_map: auto
-    tool_calling_mode: native         # native JSON tool-call protocol
-    vision_encoder: ViT
-    params_b: 7
-    disk_fp16_gb: 14
-    disk_ollama_q4_gb: 5
-    chat_template: qwen2_vl
-
-  llava_v1_6_mistral_7b:
-    phase: ["0", "1", "2"]
-    family: llava_next
-    hf_id: llava-hf/llava-v1.6-mistral-7b-hf
-    hf_revision: main
-    processor_id: llava-hf/llava-v1.6-mistral-7b-hf
-    ollama_tag: llava:7b-v1.6-mistral-q4_K_M
-    torch_dtype: float16
-    device_map: auto
-    tool_calling_mode: prompt_scaffold   # ReAct-style via [INST] block
-    vision_encoder: CLIP-ViT-L/14-336
-    params_b: 7
-    disk_fp16_gb: 14
-    disk_ollama_q4_gb: 4
-    chat_template: mistral_instruct
-
-  defended_qwen2_5_vl_7b:
-    phase: ["1", "2"]
-    family: qwen_vl
-    # Local HF dir produced by adversarial-reasoning-training/scripts/ckpt_to_hf_dir.py
-    # from runs/adv1_qwen/ckpt/weights_only.pt (epoch-1 adv-FT, TRADES β=6.0, ε=2/255).
-    hf_id: /home/medadmin/kosmasapostolidis/adversarial-reasoning-training/runs/adv1_qwen/ckpt/hf_dir
-    hf_revision: main
-    processor_id: /home/medadmin/kosmasapostolidis/adversarial-reasoning-training/runs/adv1_qwen/ckpt/hf_dir
+    processor_id: Qwen/Qwen3-VL-8B-Instruct
     torch_dtype: float16
     device_map: auto
     tool_calling_mode: native
     vision_encoder: ViT
-    params_b: 7
+    params_b: 8
     disk_fp16_gb: 16
-    chat_template: qwen2_vl
+    chat_template: qwen3_vl
     notes: >-
-      Defended adv-FT epoch-1 checkpoint. Paired-defended model_key against
-      the undefended qwen2_5_vl_7b for T3 robust-eval. Re-export via
-      ckpt_to_hf_dir.py whenever a new defended checkpoint is produced.
+      Successor to Qwen2.5-VL-7B. Uses Qwen3VLForConditionalGeneration
+      (transformers ≥ 4.57). Native JSON tool-call protocol. Same qwen_vl
+      family; loader auto-detects architecture class.
 
-  defended_llava_v1_6_mistral_7b:
+  defended_qwen3_vl_8b:
     phase: ["1", "2"]
-    family: llava_next
-    # Local HF dir produced by adversarial-reasoning-training/scripts/ckpt_to_hf_dir.py
-    # from runs/adv1_llava/ckpt/weights_only.pt (epoch-1 adv-FT, TRADES β=6.0, ε=2/255).
-    hf_id: /home/medadmin/kosmasapostolidis/adversarial-reasoning-training/runs/adv1_llava/ckpt/hf_dir
+    family: qwen_vl
+    hf_id: /home/medadmin/kosmasapostolidis/adversarial-reasoning-training/runs/adv1_qwen3/ckpt/hf_dir
     hf_revision: main
-    processor_id: /home/medadmin/kosmasapostolidis/adversarial-reasoning-training/runs/adv1_llava/ckpt/hf_dir
+    processor_id: /home/medadmin/kosmasapostolidis/adversarial-reasoning-training/runs/adv1_qwen3/ckpt/hf_dir
+    torch_dtype: float16
+    device_map: auto
+    tool_calling_mode: native
+    vision_encoder: ViT
+    params_b: 8
+    disk_fp16_gb: 18
+    chat_template: qwen3_vl
+    notes: >-
+      Defended adv-FT checkpoint for qwen3_vl_8b. Forward-declared;
+      hf_dir produced after training + ckpt_to_hf_dir.py.
+
+  llava_onevision_qwen2_7b:
+    phase: ["0", "1", "2"]
+    family: llava_onevision
+    hf_id: llava-hf/llava-onevision-qwen2-7b-ov-hf
+    hf_revision: main
+    processor_id: llava-hf/llava-onevision-qwen2-7b-ov-hf
     torch_dtype: float16
     device_map: auto
     tool_calling_mode: prompt_scaffold
-    vision_encoder: CLIP-ViT-L/14-336
+    vision_encoder: SigLIP-SO400M
+    params_b: 7
+    disk_fp16_gb: 14
+    chat_template: qwen2
+    notes: >-
+      Next-generation LLaVA replacing llava_v1_6_mistral_7b. Qwen2-7B LM
+      backbone + SigLIP-SO400M vision encoder. LlavaOnevisionForConditionalGeneration
+      (transformers ≥ 4.57). Same llava_next family; loader auto-detects.
+
+  defended_llava_onevision_qwen2_7b:
+    phase: ["1", "2"]
+    family: llava_onevision
+    hf_id: /home/medadmin/kosmasapostolidis/adversarial-reasoning-training/runs/adv1_llava_ov/ckpt/hf_dir
+    hf_revision: main
+    processor_id: /home/medadmin/kosmasapostolidis/adversarial-reasoning-training/runs/adv1_llava_ov/ckpt/hf_dir
+    torch_dtype: float16
+    device_map: auto
+    tool_calling_mode: prompt_scaffold
+    vision_encoder: SigLIP-SO400M
     params_b: 7
     disk_fp16_gb: 16
-    chat_template: mistral_instruct
+    chat_template: qwen2
     notes: >-
-      Defended adv-FT epoch-1 checkpoint. Paired-defended model_key against
-      the undefended llava_v1_6_mistral_7b for T3 robust-eval. Re-export via
-      ckpt_to_hf_dir.py whenever a new defended checkpoint is produced.
+      Defended adv-FT checkpoint for llava_onevision_qwen2_7b. Forward-declared;
+      hf_dir produced after training + ckpt_to_hf_dir.py.
 
-  llava_v1_6_vicuna_13b:
-    phase: ["1"]
-    family: llava_next
-    hf_id: llava-hf/llava-v1.6-vicuna-13b-hf
-    hf_revision: main
-    processor_id: llava-hf/llava-v1.6-vicuna-13b-hf
-    ollama_tag: llava:13b-v1.6-q4_K_M
-    torch_dtype: float16
-    device_map: auto
-    tool_calling_mode: prompt_scaffold   # ReAct-style via [INST] block
-    vision_encoder: CLIP-ViT-L/14-336
-    params_b: 13
-    disk_fp16_gb: 26
-    disk_ollama_q4_gb: 8
-    chat_template: vicuna_v1
-    notes: >-
-      Open-access third VLM in the benchmark (replaces gated
-      meta-llama/Llama-3.2-11B-Vision-Instruct for runs that cannot
-      acquire the Meta license). Same llava_next family wrapper as
-      llava_v1_6_mistral_7b — different LM backbone (Vicuna-13B vs
-      Mistral-7B) preserves architectural diversity at comparable size
-      to the 11B Llama target. ReAct-style prompt-scaffold tool-use.
-
-  defended_llava_v1_6_vicuna_13b:
-    phase: ["1"]
-    family: llava_next
-    # Local HF dir produced by adversarial-reasoning-training/scripts/ckpt_to_hf_dir.py
-    # from runs/adv1_llava13b/ckpt/weights_only.pt (epoch-1 adv-FT, TRADES β=6.0, ε=2/255).
-    hf_id: /home/medadmin/kosmasapostolidis/adversarial-reasoning-training/runs/adv1_llava13b/ckpt/hf_dir
-    hf_revision: main
-    processor_id: /home/medadmin/kosmasapostolidis/adversarial-reasoning-training/runs/adv1_llava13b/ckpt/hf_dir
-    torch_dtype: float16
-    device_map: auto
-    tool_calling_mode: prompt_scaffold
-    vision_encoder: CLIP-ViT-L/14-336
-    params_b: 13
-    disk_fp16_gb: 28
-    chat_template: vicuna_v1
-    notes: >-
-      Defended adv-FT epoch-1 checkpoint paired with the undefended
-      llava_v1_6_vicuna_13b for T3 robust-eval. Re-export via
-      ckpt_to_hf_dir.py whenever a new defended checkpoint is produced.
-
-  internvl2_8b:
+  internvl3_8b:
     phase: ["0", "1", "2"]
     family: internvl2
-    hf_id: OpenGVLab/InternVL2-8B
+    hf_id: OpenGVLab/InternVL3-8B
     hf_revision: main
-    processor_id: OpenGVLab/InternVL2-8B
+    processor_id: OpenGVLab/InternVL3-8B
     torch_dtype: float16
     device_map: auto
-    tool_calling_mode: prompt_scaffold   # ReAct-style; no native JSON tool protocol
+    tool_calling_mode: prompt_scaffold
     vision_encoder: InternViT-300M
     params_b: 8
     disk_fp16_gb: 16
     chat_template: internlm2_chat
     notes: >-
-      Open-access third VLM in the active benchmark (replaces gated
-      meta-llama/Llama-3.2-11B-Vision-Instruct AND the same-family
-      llava_v1_6_vicuna_13b). InternLM-2-7B LM backbone + InternViT-300M
-      vision encoder give true cross-family diversity vs Qwen2.5-VL and
-      LLaVA-1.6-Mistral. Loaded via AutoModel + trust_remote_code=True
-      (custom modeling code shipped with the repo). Dynamic-tile
-      preprocessing (1..12 tiles of 448x448) tracked through the attack
-      pipeline via the `num_patches_list` AttackInputs key.
+      Successor to InternVL2-8B. Loaded via AutoModel + trust_remote_code=True
+      (same pattern as internvl2_8b). InternLM-2-7B LM + InternViT-300M.
+      Same internvl2 family — AutoModel handles architecture dispatch.
 
-  defended_internvl2_8b:
+  defended_internvl3_8b:
     phase: ["1", "2"]
     family: internvl2
-    # Local HF dir produced by adversarial-reasoning-training/scripts/ckpt_to_hf_dir.py
-    # from runs/adv1_internvl2/ckpt/weights_only.pt (epoch-1 adv-FT, TRADES β=6.0, ε=2/255).
-    hf_id: /home/medadmin/kosmasapostolidis/adversarial-reasoning-training/runs/adv1_internvl2/ckpt/hf_dir
+    hf_id: /home/medadmin/kosmasapostolidis/adversarial-reasoning-training/runs/adv1_internvl3/ckpt/hf_dir
     hf_revision: main
-    processor_id: /home/medadmin/kosmasapostolidis/adversarial-reasoning-training/runs/adv1_internvl2/ckpt/hf_dir
+    processor_id: /home/medadmin/kosmasapostolidis/adversarial-reasoning-training/runs/adv1_internvl3/ckpt/hf_dir
     torch_dtype: float16
     device_map: auto
     tool_calling_mode: prompt_scaffold
@@ -155,7 +103,5 @@ models:
     disk_fp16_gb: 18
     chat_template: internlm2_chat
     notes: >-
-      Defended adv-FT epoch-1 checkpoint paired with the undefended
-      internvl2_8b for T3 robust-eval. Forward-declared so
-      configs/experiments/defended_internvl2.yaml resolves; the actual
-      hf_dir is produced AFTER training + ckpt_to_hf_dir.py.
+      Defended adv-FT checkpoint for internvl3_8b. Forward-declared;
+      hf_dir produced after training + ckpt_to_hf_dir.py.

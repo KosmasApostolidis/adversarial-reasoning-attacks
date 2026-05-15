@@ -28,15 +28,14 @@ class QwenVL(VLMBase):
         # CI + lightweight tests don't pay the cost.
         from pathlib import Path
 
-        from transformers import AutoProcessor, Qwen2_5_VLForConditionalGeneration
+        from transformers import AutoProcessor, AutoModelForVision2Seq
 
         self.model_id = hf_id
-        # HF rejects `revision=` for local directories; only forward it for hub IDs.
         from_pretrained_kwargs: dict[str, Any] = {}
         if not Path(hf_id).is_dir():
             from_pretrained_kwargs["revision"] = revision
         self.processor = AutoProcessor.from_pretrained(hf_id, **from_pretrained_kwargs)
-        self.model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
+        self.model = AutoModelForVision2Seq.from_pretrained(
             hf_id,
             torch_dtype=torch_dtype,
             device_map=device_map,

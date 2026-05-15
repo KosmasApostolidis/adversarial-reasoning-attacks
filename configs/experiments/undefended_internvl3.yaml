@@ -1,6 +1,6 @@
-# Phase 0e baseline: undefended LLaVA-1.6-Mistral-7B under PGD-L∞ at the
+# Phase 2 baseline: undefended InternVL3-8B under PGD-L∞ at the
 # canonical T3 eval budget (4/255, 8/255). Pairs 1:1 with
-# defended_llava.yaml on seed/task/attack/eps to make a valid Wilcoxon
+# defended_internvl3.yaml on seed/task/attack/eps to make a valid Wilcoxon
 # signed-rank input for the T3 gate.
 #
 # Output records.jsonl is consumed by:
@@ -8,13 +8,13 @@
 # in the adversarial-reasoning-training repo.
 
 experiment:
-  name: phase0e_baseline_llava
+  name: phase2_undefended_internvl3
   phase: "0"
   seeds: [0]
-  output_dir: ../adversarial-reasoning-training/runs/baseline_llava
+  output_dir: ../adversarial-reasoning-training/runs/undefended_internvl3
 
   models:
-    - llava_v1_6_mistral_7b
+    - internvl3_8b
 
   tasks:
     - prostate_mri_workup
