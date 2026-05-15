@@ -17,24 +17,7 @@ from ._common import (
 )
 
 
-def stat3_trajectory_lengths():
-    noise_r = load_records("runs/main/noise/records.jsonl")
-    pgd_r = load_records("runs/main/pgd/records.jsonl")
-    llava_r = [r for r in noise_r if "llava" in r.get("model_id", "").lower()]
-
-    fig, axes = plt.subplots(1, 3, figsize=(15, 5))
-    fig.subplots_adjust(wspace=0.35)
-
-    datasets = [
-        ("Benign (Qwen)", [len(r["benign"]["tool_sequence"]) for r in pgd_r], C_BENIGN),
-        ("Noise-atk (Qwen)", [len(r["attacked"]["tool_sequence"]) for r in noise_r], C_NOISE),
-        ("PGD-atk (Qwen)", [len(r["attacked"]["tool_sequence"]) for r in pgd_r], C_PGD),
-        ("Noise-atk (LLaVA)", [len(r["attacked"]["tool_sequence"]) for r in llava_r], C_LLAVA),
-    ]
-
-    # ── A: Overlapping histograms ─────────────────────────────────────
-    ax = axes[0]
-    bins = np.arange(0, 16, 1)
+def _draw_histogram(ax, datasets, bins):
     for label, vals, c in datasets:
         ax.hist(vals, bins=bins, alpha=0.45, color=c, edgecolor=c, lw=1.2, label=label)
     ax.set_xlabel("Trajectory length (steps)")
@@ -44,8 +27,8 @@ def stat3_trajectory_lengths():
     despine(ax)
     _panel(ax, "A")
 
-    # ── B: CDF ────────────────────────────────────────────────────────
-    ax = axes[1]
+
+def _draw_cdf(ax, datasets):
     for label, vals, c in datasets:
         s = sorted(vals)
         y = np.arange(1, len(s) + 1) / len(s)
@@ -58,8 +41,8 @@ def stat3_trajectory_lengths():
     despine(ax)
     _panel(ax, "B")
 
-    # ── C: Scatter — benign len vs attacked len (noise vs PGD) ────────
-    ax = axes[2]
+
+def _draw_before_after_scatter(ax, noise_r, pgd_r):
     bl_n = [len(r["benign"]["tool_sequence"]) for r in noise_r]
     al_n = [len(r["attacked"]["tool_sequence"]) for r in noise_r]
     bl_p = [len(r["benign"]["tool_sequence"]) for r in pgd_r]
@@ -75,6 +58,26 @@ def stat3_trajectory_lengths():
     ax.legend(fontsize=9)
     despine(ax)
     _panel(ax, "C")
+
+
+def stat3_trajectory_lengths():
+    noise_r = load_records("runs/main/noise/records.jsonl")
+    pgd_r = load_records("runs/main/pgd/records.jsonl")
+    llava_r = [r for r in noise_r if "llava" in r.get("model_id", "").lower()]
+
+    fig, axes = plt.subplots(1, 3, figsize=(15, 5))
+    fig.subplots_adjust(wspace=0.35)
+
+    datasets = [
+        ("Benign (Qwen)", [len(r["benign"]["tool_sequence"]) for r in pgd_r], C_BENIGN),
+        ("Noise-atk (Qwen)", [len(r["attacked"]["tool_sequence"]) for r in noise_r], C_NOISE),
+        ("PGD-atk (Qwen)", [len(r["attacked"]["tool_sequence"]) for r in pgd_r], C_PGD),
+        ("Noise-atk (LLaVA)", [len(r["attacked"]["tool_sequence"]) for r in llava_r], C_LLAVA),
+    ]
+
+    _draw_histogram(axes[0], datasets, np.arange(0, 16, 1))
+    _draw_cdf(axes[1], datasets)
+    _draw_before_after_scatter(axes[2], noise_r, pgd_r)
 
     fig.suptitle(
         "Trajectory length analysis: how attacks shorten/extend reasoning chains",

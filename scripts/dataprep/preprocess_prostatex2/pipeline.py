@@ -111,6 +111,103 @@ def parse_args() -> argparse.Namespace:
     return p.parse_args()
 
 
+def _process_all_patients(
+    bundles, cache: Path, skipped: list[dict]
+) -> tuple[list[np.ndarray], list[np.ndarray], list[str]]:
+    Xs: list[np.ndarray] = []
+    ys: list[np.ndarray] = []
+    pids: list[str] = []
+    for b in bundles:
+        try:
+            res = process_patient(b, cache)
+        except Exception as e:
+            LOG.exception("[%s] failed: %s", b.patient_id, e)
+            skipped.append({"patient": b.patient_id, "error": str(e)})
+            continue
+        if res is None:
+            skipped.append({"patient": b.patient_id, "error": "empty_seg"})
+            continue
+        X, y = res
+        Xs.append(X)
+        ys.append(y)
+        pids.append(b.patient_id)
+    return Xs, ys, pids
+
+
+def _compute_splits(
+    idx_all: np.ndarray, random_seed: int
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    idx_train, idx_holdout = train_test_split(
+        idx_all,
+        train_size=TRAIN_FRAC,
+        random_state=random_seed,
+        shuffle=True,
+    )
+    idx_val, idx_test = train_test_split(
+        idx_holdout,
+        test_size=0.5,
+        random_state=random_seed,
+        shuffle=True,
+    )
+    LOG.info("split: train=%d val=%d test=%d", len(idx_train), len(idx_val), len(idx_test))
+    return idx_train, idx_val, idx_test
+
+
+def _save_holdouts(
+    out: Path,
+    X_all: np.ndarray,
+    y_all: np.ndarray,
+    idx_val: np.ndarray,
+    idx_test: np.ndarray,
+) -> None:
+    holdout_dir = out / "holdout"
+    save_split(holdout_dir, X_all[idx_val], y_all[idx_val], "val")
+    save_split(holdout_dir, X_all[idx_test], y_all[idx_test], "test")
+
+
+def _save_cv_folds(
+    cv_dir: Path,
+    kf: KFold,
+    idx_train: np.ndarray,
+    X_all: np.ndarray,
+    y_all: np.ndarray,
+) -> None:
+    cv_dir.mkdir(parents=True, exist_ok=True)
+    for fold, (tr_idx_local, va_idx_local) in enumerate(kf.split(idx_train), start=1):
+        tr_global = idx_train[tr_idx_local]
+        va_global = idx_train[va_idx_local]
+        save_fold(
+            cv_dir, fold, X_all[tr_global], y_all[tr_global], X_all[va_global], y_all[va_global]
+        )
+
+
+def _write_manifest(
+    out_dir: Path,
+    pids: list[str],
+    idx_train: np.ndarray,
+    idx_val: np.ndarray,
+    idx_test: np.ndarray,
+    n_total: int,
+    random_seed: int,
+) -> None:
+    manifest_out = {
+        "cohort": "ProstateX-2 (segmented subset of TCIA PROSTATEx)",
+        "channel_order": ["T2W", "ADC", "DWI_b800"],
+        "shape_per_patient": [TARGET_Z, TARGET_H, TARGET_W, 3],
+        "n_patients_total": int(n_total),
+        "n_train": len(idx_train),
+        "n_holdout_val": len(idx_val),
+        "n_holdout_test": len(idx_test),
+        "n_cv_folds": N_CV_FOLDS,
+        "random_seed": int(random_seed),
+        "patient_ids_train": [pids[i] for i in idx_train.tolist()],
+        "patient_ids_val": [pids[i] for i in idx_val.tolist()],
+        "patient_ids_test": [pids[i] for i in idx_test.tolist()],
+    }
+    (out_dir / "manifest.json").write_text(json.dumps(manifest_out, indent=2))
+    LOG.info("manifest written to %s", out_dir / "manifest.json")
+
+
 def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     args = parse_args()
@@ -127,24 +224,7 @@ def main() -> None:
         LOG.error("no patient bundles found — fetcher may not have completed yet.")
         sys.exit(1)
 
-    Xs: list[np.ndarray] = []
-    ys: list[np.ndarray] = []
-    pids: list[str] = []
-
-    for b in bundles:
-        try:
-            res = process_patient(b, args.cache)
-        except Exception as e:
-            LOG.exception("[%s] failed: %s", b.patient_id, e)
-            skipped.append({"patient": b.patient_id, "error": str(e)})
-            continue
-        if res is None:
-            skipped.append({"patient": b.patient_id, "error": "empty_seg"})
-            continue
-        X, y = res
-        Xs.append(X)
-        ys.append(y)
-        pids.append(b.patient_id)
+    Xs, ys, pids = _process_all_patients(bundles, args.cache, skipped)
 
     LOG.info("processed %d patients, %d skipped", len(Xs), len(skipped))
     if not Xs:
@@ -159,47 +239,13 @@ def main() -> None:
     pd.DataFrame(skipped).to_csv(args.out / "skipped.csv", index=False)
 
     idx_all = np.arange(X_all.shape[0])
-    idx_train, idx_holdout = train_test_split(
-        idx_all,
-        train_size=TRAIN_FRAC,
-        random_state=args.random_seed,
-        shuffle=True,
-    )
-    idx_val, idx_test = train_test_split(
-        idx_holdout,
-        test_size=0.5,
-        random_state=args.random_seed,
-        shuffle=True,
-    )
-    LOG.info("split: train=%d val=%d test=%d", len(idx_train), len(idx_val), len(idx_test))
+    idx_train, idx_val, idx_test = _compute_splits(idx_all, args.random_seed)
 
-    holdout_dir = args.out / "holdout"
-    save_split(holdout_dir, X_all[idx_val], y_all[idx_val], "val")
-    save_split(holdout_dir, X_all[idx_test], y_all[idx_test], "test")
+    _save_holdouts(args.out, X_all, y_all, idx_val, idx_test)
 
     kf = KFold(n_splits=N_CV_FOLDS, shuffle=True, random_state=args.random_seed)
-    cv_dir = args.out / "cv_folds"
-    cv_dir.mkdir(parents=True, exist_ok=True)
-    for fold, (tr_idx_local, va_idx_local) in enumerate(kf.split(idx_train), start=1):
-        tr_global = idx_train[tr_idx_local]
-        va_global = idx_train[va_idx_local]
-        save_fold(
-            cv_dir, fold, X_all[tr_global], y_all[tr_global], X_all[va_global], y_all[va_global]
-        )
+    _save_cv_folds(args.out / "cv_folds", kf, idx_train, X_all, y_all)
 
-    manifest_out = {
-        "cohort": "ProstateX-2 (segmented subset of TCIA PROSTATEx)",
-        "channel_order": ["T2W", "ADC", "DWI_b800"],
-        "shape_per_patient": [TARGET_Z, TARGET_H, TARGET_W, 3],
-        "n_patients_total": int(X_all.shape[0]),
-        "n_train": len(idx_train),
-        "n_holdout_val": len(idx_val),
-        "n_holdout_test": len(idx_test),
-        "n_cv_folds": N_CV_FOLDS,
-        "random_seed": int(args.random_seed),
-        "patient_ids_train": [pids[i] for i in idx_train.tolist()],
-        "patient_ids_val": [pids[i] for i in idx_val.tolist()],
-        "patient_ids_test": [pids[i] for i in idx_test.tolist()],
-    }
-    (args.out / "manifest.json").write_text(json.dumps(manifest_out, indent=2))
-    LOG.info("manifest written to %s", args.out / "manifest.json")
+    _write_manifest(
+        args.out, pids, idx_train, idx_val, idx_test, X_all.shape[0], args.random_seed
+    )

@@ -10,22 +10,18 @@ import numpy as np
 
 from ._common import C_BENIGN, C_NODE, OUT, _load, _short
 
+X_LEFT, X_RIGHT = 0.15, 0.85
+COLORS = {
+    "kept": "#3fb950",
+    "sub": "#f85149",
+    "drop": "#8b949e",
+    "ins": "#d2a8ff",
+}
 
-def graph4_sankey() -> None:
-    pgd_recs = _load("runs/pgd_smoke/records.jsonl")
 
-    all_tools: list[str] = sorted(
-        {
-            t
-            for r in pgd_recs
-            for seq in [r["benign"]["tool_sequence"], r["attacked"]["tool_sequence"]]
-            for t in seq
-        }
-    )
-    n = len(all_tools)
-
-    # Count how many times each benign tool appeared, and for each position
-    # whether it was kept, substituted, or dropped in the attacked sequence
+def _count_fates(
+    pgd_recs: list[dict],
+) -> tuple[Counter, Counter, Counter, Counter]:
     kept_ct: Counter = Counter()
     sub_ct: Counter = Counter()
     drop_ct: Counter = Counter()
@@ -44,22 +40,13 @@ def graph4_sankey() -> None:
                 drop_ct[bt] += 1
         for i in range(len(b), len(a)):
             ins_ct[a[i]] += 1
+    return kept_ct, sub_ct, drop_ct, ins_ct
 
-    fig, ax = plt.subplots(figsize=(13, 7))
 
-    X_LEFT, X_RIGHT = 0.15, 0.85
-    ys = np.linspace(0.1, 0.9, n)
-    tool_y = {t: ys[i] for i, t in enumerate(all_tools)}
+def _draw_left_column(
+    ax, all_tools: list[str], tool_y: dict, kept_ct: Counter, sub_ct: Counter, drop_ct: Counter
+) -> None:
     bar_h = 0.06
-
-    COLORS = {
-        "kept": "#3fb950",
-        "sub": "#f85149",
-        "drop": "#8b949e",
-        "ins": "#d2a8ff",
-    }
-
-    # Left column — benign tool boxes
     for t in all_tools:
         y = tool_y[t]
         total = kept_ct[t] + sub_ct[t] + drop_ct[t]
@@ -89,9 +76,16 @@ def graph4_sankey() -> None:
                 X_LEFT - 0.12, y, str(total), ha="right", va="center", fontsize=8, color="#8b949e"
             )
 
-    # Right column — fate boxes stacked
-    {t: tool_y[t] for t in all_tools}
-    fate_entries = []  # (left_tool, x_right, y_right, color, w)
+
+def _build_fate_entries(
+    pgd_recs: list[dict],
+    all_tools: list[str],
+    kept_ct: Counter,
+    sub_ct: Counter,
+    drop_ct: Counter,
+    ins_ct: Counter,
+) -> list[tuple]:
+    fate_entries: list[tuple] = []  # (left_tool, x_right, y_right, color, w)
 
     for lt in all_tools:
         # kept
@@ -116,8 +110,10 @@ def graph4_sankey() -> None:
     for t in all_tools:
         if ins_ct[t]:
             fate_entries.append((None, t, ins_ct[t], "ins"))
+    return fate_entries
 
-    # Draw Sankey flow arcs
+
+def _draw_sankey_arcs(ax, fate_entries: list[tuple], tool_y: dict) -> None:
     for entry in fate_entries:
         lt, rt, w, fate = entry
         color = COLORS[fate]
@@ -142,7 +138,8 @@ def graph4_sankey() -> None:
             zorder=2,
         )
 
-    # Right fate labels
+
+def _draw_right_labels(ax, fate_entries: list[tuple], tool_y: dict) -> None:
     for fate, label in [
         ("kept", "Kept"),
         ("sub", "Substituted"),
@@ -163,6 +160,8 @@ def graph4_sankey() -> None:
                 va="center",
             )
 
+
+def _decorate_sankey(ax) -> None:
     ax.set_xlim(0, 1.15)
     ax.set_ylim(0, 1.0)
     ax.axis("off")
@@ -183,6 +182,46 @@ def graph4_sankey() -> None:
         fontweight="bold",
     )
     ax.text(X_RIGHT + 0.02, 0.97, "Fate", ha="left", fontsize=10, color=C_NODE, fontweight="bold")
+
+
+def graph4_sankey() -> None:
+    pgd_recs = _load("runs/pgd_smoke/records.jsonl")
+
+    all_tools: list[str] = sorted(
+        {
+            t
+            for r in pgd_recs
+            for seq in [r["benign"]["tool_sequence"], r["attacked"]["tool_sequence"]]
+            for t in seq
+        }
+    )
+    n = len(all_tools)
+
+    # Count how many times each benign tool appeared, and for each position
+    # whether it was kept, substituted, or dropped in the attacked sequence
+    kept_ct, sub_ct, drop_ct, ins_ct = _count_fates(pgd_recs)
+
+    fig, ax = plt.subplots(figsize=(13, 7))
+
+    ys = np.linspace(0.1, 0.9, n)
+    tool_y = {t: ys[i] for i, t in enumerate(all_tools)}
+
+    # Left column — benign tool boxes
+    _draw_left_column(ax, all_tools, tool_y, kept_ct, sub_ct, drop_ct)
+
+    # Right column — fate boxes stacked
+    {t: tool_y[t] for t in all_tools}
+    fate_entries = _build_fate_entries(
+        pgd_recs, all_tools, kept_ct, sub_ct, drop_ct, ins_ct
+    )
+
+    # Draw Sankey flow arcs
+    _draw_sankey_arcs(ax, fate_entries, tool_y)
+
+    # Right fate labels
+    _draw_right_labels(ax, fate_entries, tool_y)
+
+    _decorate_sankey(ax)
 
     fig.savefig(OUT / "graph4_sankey.png")
     plt.close(fig)

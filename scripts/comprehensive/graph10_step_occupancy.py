@@ -20,6 +20,57 @@ from ._common import (
 )
 
 
+def _make_mat(records, key, all_tools, tidx, max_step):
+    m = np.zeros((len(all_tools), max_step))
+    for r in records:
+        for s, t in enumerate(r[key]["tool_sequence"][:max_step]):
+            m[tidx[t], s] += 1
+    return m
+
+
+def _annotate_cells(ax, mat, title, all_tools, max_step, vmin, vmax):
+    for i in range(len(all_tools)):
+        for j in range(max_step):
+            v = mat[i, j]
+            if v != 0:
+                txt = f"{v:+.0f}" if title.startswith("PGD") else str(int(v))
+                tcolor = "white" if abs(v) > (vmax - vmin) * 0.45 else "#cccccc"
+                ax.text(
+                    j,
+                    i,
+                    txt,
+                    ha="center",
+                    va="center",
+                    fontsize=9,
+                    color=tcolor,
+                    fontweight="bold",
+                )
+
+
+def _draw_colorbar(fig, ax, im):
+    cb = fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
+    cb.ax.yaxis.set_tick_params(color=DARK_FG)
+    plt.setp(cb.ax.yaxis.get_ticklabels(), color=DARK_FG)
+    cb.set_label("Count / Δ", fontsize=8, color=DARK_FG)
+
+
+def _draw_panel(fig, ax, title, mat, cmap, vmin, vmax, all_tools, max_step):
+    ax.set_facecolor(DARK_BG)
+    im = ax.imshow(mat, cmap=cmap, aspect="auto", vmin=vmin, vmax=vmax, interpolation="nearest")
+    ax.set_xticks(range(max_step))
+    ax.set_xticklabels([f"s{i + 1}" for i in range(max_step)], fontsize=9, color=DARK_FG)
+    ax.set_yticks(range(len(all_tools)))
+    ax.set_yticklabels([_s(t) for t in all_tools], fontsize=9.5, color=DARK_FG)
+    ax.set_xlabel("Step position", fontsize=10, color=DARK_FG)
+    ax.set_title(title, fontsize=12, fontweight="bold", color=DARK_FG, pad=8)
+    for sp in ax.spines.values():
+        sp.set_color(DARK_GRID)
+    ax.tick_params(colors=DARK_FG)
+
+    _annotate_cells(ax, mat, title, all_tools, max_step, vmin, vmax)
+    _draw_colorbar(fig, ax, im)
+
+
 def graph10_step_occupancy():
     noise_r = load_records("runs/main/noise/records.jsonl")
     pgd_r = load_records("runs/main/pgd/records.jsonl")
@@ -35,16 +86,9 @@ def graph10_step_occupancy():
     tidx = {t: i for i, t in enumerate(all_tools)}
     MAX_STEP = 8
 
-    def make_mat(records, key):
-        m = np.zeros((len(all_tools), MAX_STEP))
-        for r in records:
-            for s, t in enumerate(r[key]["tool_sequence"][:MAX_STEP]):
-                m[tidx[t], s] += 1
-        return m
-
-    b_mat = make_mat(pgd_r, "benign")
-    n_mat = make_mat(noise_r, "attacked")
-    p_mat = make_mat(pgd_r, "attacked")
+    b_mat = _make_mat(pgd_r, "benign", all_tools, tidx, MAX_STEP)
+    n_mat = _make_mat(noise_r, "attacked", all_tools, tidx, MAX_STEP)
+    p_mat = _make_mat(pgd_r, "attacked", all_tools, tidx, MAX_STEP)
     diff = p_mat - b_mat  # positive = PGD added, negative = PGD removed
 
     fig, axes = plt.subplots(1, 3, figsize=(18, 6))
@@ -64,39 +108,7 @@ def graph10_step_occupancy():
     for ax, title, mat, cmap, vmin, vmax in zip(
         axes, titles, mats, cmaps, vmins, vmaxs, strict=False
     ):
-        ax.set_facecolor(DARK_BG)
-        im = ax.imshow(mat, cmap=cmap, aspect="auto", vmin=vmin, vmax=vmax, interpolation="nearest")
-        ax.set_xticks(range(MAX_STEP))
-        ax.set_xticklabels([f"s{i + 1}" for i in range(MAX_STEP)], fontsize=9, color=DARK_FG)
-        ax.set_yticks(range(len(all_tools)))
-        ax.set_yticklabels([_s(t) for t in all_tools], fontsize=9.5, color=DARK_FG)
-        ax.set_xlabel("Step position", fontsize=10, color=DARK_FG)
-        ax.set_title(title, fontsize=12, fontweight="bold", color=DARK_FG, pad=8)
-        for sp in ax.spines.values():
-            sp.set_color(DARK_GRID)
-        ax.tick_params(colors=DARK_FG)
-
-        for i in range(len(all_tools)):
-            for j in range(MAX_STEP):
-                v = mat[i, j]
-                if v != 0:
-                    txt = f"{v:+.0f}" if title.startswith("PGD") else str(int(v))
-                    tcolor = "white" if abs(v) > (vmax - vmin) * 0.45 else "#cccccc"
-                    ax.text(
-                        j,
-                        i,
-                        txt,
-                        ha="center",
-                        va="center",
-                        fontsize=9,
-                        color=tcolor,
-                        fontweight="bold",
-                    )
-
-        cb = fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
-        cb.ax.yaxis.set_tick_params(color=DARK_FG)
-        plt.setp(cb.ax.yaxis.get_ticklabels(), color=DARK_FG)
-        cb.set_label("Count / Δ", fontsize=8, color=DARK_FG)
+        _draw_panel(fig, ax, title, mat, cmap, vmin, vmax, all_tools, MAX_STEP)
 
     fig.suptitle(
         "Step-position occupancy heatmap — which tools PGD inserts, removes, or shifts",

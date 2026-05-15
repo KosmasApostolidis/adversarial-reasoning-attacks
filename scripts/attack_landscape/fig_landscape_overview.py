@@ -11,15 +11,7 @@ import numpy as np
 from ._common import ATTACK_ORDER, LABELS, PALETTE, bootstrap_ci, edits, flip_rate
 
 
-def fig_landscape_overview(by_attack: dict[str, list[dict]], out_path: Path) -> None:
-    fig = plt.figure(figsize=(13.5, 9), constrained_layout=True)
-    gs = fig.add_gridspec(2, 2, hspace=0.18, wspace=0.18)
-    ax_box = fig.add_subplot(gs[0, 0])
-    ax_bar = fig.add_subplot(gs[0, 1])
-    ax_eps = fig.add_subplot(gs[1, 0])
-    ax_flip = fig.add_subplot(gs[1, 1])
-
-    # ── Top-left: violin+strip overlay
+def _render_box_panel(ax_box, by_attack: dict[str, list[dict]]) -> None:
     data = [edits(by_attack[a]) for a in ATTACK_ORDER]
     parts = ax_box.violinplot(
         data,
@@ -56,7 +48,8 @@ def fig_landscape_overview(by_attack: dict[str, list[dict]], out_path: Path) -> 
     ax_box.set_ylim(-0.05, 1.05)
     ax_box.axhline(0, color="#cccccc", linewidth=0.6)
 
-    # ── Top-right: bar with bootstrap CI
+
+def _render_bar_panel(ax_bar, by_attack: dict[str, list[dict]]) -> None:
     means = [edits(by_attack[a]).mean() if edits(by_attack[a]).size else 0.0 for a in ATTACK_ORDER]
     cis = [bootstrap_ci(edits(by_attack[a])) for a in ATTACK_ORDER]
     err_lo = np.array([m - lo for m, (lo, _) in zip(means, cis, strict=False)])
@@ -88,49 +81,54 @@ def fig_landscape_overview(by_attack: dict[str, list[dict]], out_path: Path) -> 
         )
     ax_bar.set_ylim(0, max(means + [hi for _, hi in cis]) * 1.20 + 0.05)
 
-    # ── Bottom-left: ε vs mean edit-distance with bootstrap CI bands
-    eps_vals = sorted({float(r["epsilon"]) for recs in by_attack.values() for r in recs})
+
+def _draw_eps_one_attack(ax_eps, name: str, recs: list[dict]) -> None:
+    groups = defaultdict(list)
+    for r in recs:
+        groups[float(r["epsilon"])].append(r["edit_distance_norm"])
+    if len(groups) < 2 and name != "pgd":
+        pass
+    xs = sorted(groups)
+    if not xs:
+        return
+    ys_mean, ys_lo, ys_hi = [], [], []
+    for e in xs:
+        arr = np.asarray(groups[e])
+        ys_mean.append(arr.mean())
+        lo, hi = bootstrap_ci(arr)
+        ys_lo.append(lo)
+        ys_hi.append(hi)
+    if len(xs) == 1:
+        ax_eps.errorbar(
+            xs,
+            ys_mean,
+            yerr=[[ys_mean[0] - ys_lo[0]], [ys_hi[0] - ys_mean[0]]],
+            fmt="*",
+            color=PALETTE[name],
+            markersize=15,
+            capsize=5,
+            label=f"{LABELS[name]} (smoke only)",
+        )
+    else:
+        ax_eps.plot(
+            xs,
+            ys_mean,
+            marker="o",
+            color=PALETTE[name],
+            linewidth=2.2,
+            markersize=7,
+            markeredgecolor="white",
+            markeredgewidth=0.8,
+            label=LABELS[name],
+        )
+        ax_eps.fill_between(xs, ys_lo, ys_hi, color=PALETTE[name], alpha=0.18)
+
+
+def _render_eps_panel(
+    ax_eps, by_attack: dict[str, list[dict]], eps_vals: list[float]
+) -> None:
     for name in ATTACK_ORDER:
-        recs = by_attack[name]
-        groups = defaultdict(list)
-        for r in recs:
-            groups[float(r["epsilon"])].append(r["edit_distance_norm"])
-        if len(groups) < 2 and name != "pgd":
-            pass
-        xs = sorted(groups)
-        if not xs:
-            continue
-        ys_mean, ys_lo, ys_hi = [], [], []
-        for e in xs:
-            arr = np.asarray(groups[e])
-            ys_mean.append(arr.mean())
-            lo, hi = bootstrap_ci(arr)
-            ys_lo.append(lo)
-            ys_hi.append(hi)
-        if len(xs) == 1:
-            ax_eps.errorbar(
-                xs,
-                ys_mean,
-                yerr=[[ys_mean[0] - ys_lo[0]], [ys_hi[0] - ys_mean[0]]],
-                fmt="*",
-                color=PALETTE[name],
-                markersize=15,
-                capsize=5,
-                label=f"{LABELS[name]} (smoke only)",
-            )
-        else:
-            ax_eps.plot(
-                xs,
-                ys_mean,
-                marker="o",
-                color=PALETTE[name],
-                linewidth=2.2,
-                markersize=7,
-                markeredgecolor="white",
-                markeredgewidth=0.8,
-                label=LABELS[name],
-            )
-            ax_eps.fill_between(xs, ys_lo, ys_hi, color=PALETTE[name], alpha=0.18)
+        _draw_eps_one_attack(ax_eps, name, by_attack[name])
     ax_eps.set_xlabel("ε (normalised pixel domain)")
     ax_eps.set_ylabel("Mean edit distance ± 95% CI")
     ax_eps.set_title(
@@ -141,7 +139,8 @@ def fig_landscape_overview(by_attack: dict[str, list[dict]], out_path: Path) -> 
     ax_eps.grid(linestyle=":", alpha=0.35)
     ax_eps.legend(loc="upper left", framealpha=0.9, frameon=True, edgecolor="#dddddd")
 
-    # ── Bottom-right: first-step flip rate per attack
+
+def _render_flip_panel(ax_flip, by_attack: dict[str, list[dict]]) -> None:
     flips = [flip_rate(by_attack[a]) for a in ATTACK_ORDER]
     bars = ax_flip.barh(
         range(len(ATTACK_ORDER)),
@@ -167,6 +166,22 @@ def fig_landscape_overview(by_attack: dict[str, list[dict]], out_path: Path) -> 
         )
     ax_flip.invert_yaxis()
     ax_flip.grid(axis="x", linestyle=":", alpha=0.35)
+
+
+def fig_landscape_overview(by_attack: dict[str, list[dict]], out_path: Path) -> None:
+    fig = plt.figure(figsize=(13.5, 9), constrained_layout=True)
+    gs = fig.add_gridspec(2, 2, hspace=0.18, wspace=0.18)
+    ax_box = fig.add_subplot(gs[0, 0])
+    ax_bar = fig.add_subplot(gs[0, 1])
+    ax_eps = fig.add_subplot(gs[1, 0])
+    ax_flip = fig.add_subplot(gs[1, 1])
+
+    eps_vals = sorted({float(r["epsilon"]) for recs in by_attack.values() for r in recs})
+
+    _render_box_panel(ax_box, by_attack)
+    _render_bar_panel(ax_bar, by_attack)
+    _render_eps_panel(ax_eps, by_attack, eps_vals)
+    _render_flip_panel(ax_flip, by_attack)
 
     fig.suptitle(
         "Adversarial Attack Landscape on Qwen2.5-VL-7B Medical Agent (ProstateX val=5)",

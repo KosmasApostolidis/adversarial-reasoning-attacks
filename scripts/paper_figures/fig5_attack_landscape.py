@@ -15,9 +15,9 @@ from ._common import (
 )
 
 
-def fig5_attack_landscape() -> None:
-    all_noise = load_records("runs/main/noise/records.jsonl")
-    all_pgd = load_records("runs/main/pgd/records.jsonl")
+def _compute_groups(
+    all_noise: list[dict], all_pgd: list[dict]
+) -> tuple[list[tuple[str, np.ndarray, str]], list[dict]]:
     noise_q = [r for r in all_noise if "qwen" in r.get("model_id", "").lower()]
     noise_l = [r for r in all_noise if "llava" in r.get("model_id", "").lower()]
     pgd_q = [r for r in all_pgd if "qwen" in r.get("model_id", "").lower()]
@@ -27,9 +27,12 @@ def fig5_attack_landscape() -> None:
         ("Qwen\n(PGD)", np.array([r["edit_distance_norm"] for r in pgd_q]), C_PGD),
         ("LLaVA\n(noise)", np.array([r["edit_distance_norm"] for r in noise_l]), C_LLAVA),
     ]
+    return groups, pgd_q
 
-    fig, ax = plt.subplots(figsize=(9, 5))
-    positions = [1, 2, 3]
+
+def _draw_violins(
+    ax, groups: list[tuple[str, np.ndarray, str]], positions: list[int]
+) -> None:
     parts = ax.violinplot(
         [g[1] for g in groups],
         positions=positions,
@@ -43,6 +46,10 @@ def fig5_attack_landscape() -> None:
     parts["cmedians"].set_colors(["black"] * len(groups))
     parts["cmedians"].set_linewidth(2.5)
 
+
+def _annotate_groups(
+    ax, groups: list[tuple[str, np.ndarray, str]], positions: list[int]
+) -> None:
     rng = np.random.default_rng(7)
     for xi, (_label, arr, c) in zip(positions, groups, strict=False):
         jitter = rng.uniform(-0.07, 0.07, len(arr))
@@ -65,6 +72,28 @@ def fig5_attack_landscape() -> None:
             color=c,
         )
 
+
+def _draw_significance_bracket(ax, pgd_q: list[dict]) -> None:
+    y_bracket = max(r["edit_distance_norm"] for r in pgd_q) + 0.22
+    ax.annotate(
+        "",
+        xy=(2, y_bracket),
+        xytext=(1, y_bracket),
+        arrowprops=dict(arrowstyle="-", color="black", lw=1.5),
+    )
+    ax.text(1.5, y_bracket + 0.03, "p < 0.05*", ha="center", fontsize=9, style="italic")
+
+
+def fig5_attack_landscape() -> None:
+    all_noise = load_records("runs/main/noise/records.jsonl")
+    all_pgd = load_records("runs/main/pgd/records.jsonl")
+    groups, pgd_q = _compute_groups(all_noise, all_pgd)
+
+    fig, ax = plt.subplots(figsize=(9, 5))
+    positions = [1, 2, 3]
+    _draw_violins(ax, groups, positions)
+    _annotate_groups(ax, groups, positions)
+
     ax.set_xticks(positions)
     ax.set_xticklabels([g[0] for g in groups], fontsize=11)
     ax.set_ylabel("Normalised trajectory edit distance", fontsize=11)
@@ -77,14 +106,7 @@ def fig5_attack_landscape() -> None:
     )
 
     # Significance bracket (PGD vs noise, same model)
-    y_bracket = max(r["edit_distance_norm"] for r in pgd_q) + 0.22
-    ax.annotate(
-        "",
-        xy=(2, y_bracket),
-        xytext=(1, y_bracket),
-        arrowprops=dict(arrowstyle="-", color="black", lw=1.5),
-    )
-    ax.text(1.5, y_bracket + 0.03, "p < 0.05*", ha="center", fontsize=9, style="italic")
+    _draw_significance_bracket(ax, pgd_q)
 
     despine(ax)
     fig.savefig(OUT / "fig5_attack_landscape.png")

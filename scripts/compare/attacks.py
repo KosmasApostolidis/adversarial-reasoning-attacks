@@ -220,7 +220,7 @@ def _pgd_noise_compare(noise_path: Path, pgd_path: Path, out_dir: Path) -> int:
     return 0
 
 
-def main() -> int:
+def _build_argparser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser()
     ap.add_argument(
         "--mode",
@@ -236,32 +236,12 @@ def main() -> int:
     ap.add_argument("--noise", help="[pgd_noise mode] records.jsonl from noise run.")
     ap.add_argument("--pgd", help="[pgd_noise mode] records.jsonl from PGD run.")
     ap.add_argument("--out", default=None)
-    args = ap.parse_args()
+    return ap
 
-    if args.mode == "pgd_noise":
-        if not (args.noise and args.pgd):
-            ap.error("--noise and --pgd are required for --mode pgd_noise")
-        out_dir = Path(args.out or "paper/figures/pgd_vs_noise")
-        return _pgd_noise_compare(Path(args.noise), Path(args.pgd), out_dir)
 
-    if not args.runs:
-        ap.error("--runs is required for --mode default")
-
-    paths = _parse_runs(args.runs)
-    records_by_attack = {name: _load_records(p) for name, p in paths.items()}
-    edit_by_attack = {
-        name: np.array([r["edit_distance_norm"] for r in recs], dtype=np.float64)
-        for name, recs in records_by_attack.items()
-    }
-
-    out_dir = Path(args.out or "paper/figures/attack_comparison")
-    out_dir.mkdir(parents=True, exist_ok=True)
-
-    boxplot(edit_by_attack, out_dir / "edit_distance_box.png")
-    bar_with_ci(edit_by_attack, out_dir / "edit_distance_bar.png")
-    line_vs_eps(records_by_attack, out_dir / "edit_distance_vs_eps.png")
-    hit_rate = targeted_hit_rate(records_by_attack, out_dir / "targeted_hit_rate.png")
-
+def _compute_summary(
+    edit_by_attack: dict[str, np.ndarray], hit_rate: float | None
+) -> dict[str, dict]:
     summary = {
         name: {
             "n": int(arr.size),
@@ -273,15 +253,56 @@ def main() -> int:
     }
     if hit_rate is not None:
         summary["targeted_tool"]["hit_rate"] = hit_rate
-    (out_dir / "summary.json").write_text(json.dumps(summary, indent=2))
+    return summary
 
+
+def _print_summary(
+    paths: dict[str, Path],
+    edit_by_attack: dict[str, np.ndarray],
+    hit_rate: float | None,
+    out_dir: Path,
+) -> None:
     print(f"[compare_attacks] wrote {len(paths)} attacks → {out_dir}")
     for name, arr in edit_by_attack.items():
         ci = _bootstrap_ci(arr)
         print(f"  {name:18s} n={arr.size:3d}  μ={arr.mean():.3f}  CI95=[{ci[0]:.3f}, {ci[1]:.3f}]")
     if hit_rate is not None:
         print(f"  targeted_tool hit rate: {hit_rate:.2%}")
+
+
+def _run_default_mode(args: argparse.Namespace) -> int:
+    paths = _parse_runs(args.runs)
+    records_by_attack = {name: _load_records(p) for name, p in paths.items()}
+    edit_by_attack = {
+        name: np.array([r["edit_distance_norm"] for r in recs], dtype=np.float64)
+        for name, recs in records_by_attack.items()
+    }
+    out_dir = Path(args.out or "paper/figures/attack_comparison")
+    out_dir.mkdir(parents=True, exist_ok=True)
+    boxplot(edit_by_attack, out_dir / "edit_distance_box.png")
+    bar_with_ci(edit_by_attack, out_dir / "edit_distance_bar.png")
+    line_vs_eps(records_by_attack, out_dir / "edit_distance_vs_eps.png")
+    hit_rate = targeted_hit_rate(records_by_attack, out_dir / "targeted_hit_rate.png")
+    summary = _compute_summary(edit_by_attack, hit_rate)
+    (out_dir / "summary.json").write_text(json.dumps(summary, indent=2))
+    _print_summary(paths, edit_by_attack, hit_rate, out_dir)
     return 0
+
+
+def main() -> int:
+    ap = _build_argparser()
+    args = ap.parse_args()
+
+    if args.mode == "pgd_noise":
+        if not (args.noise and args.pgd):
+            ap.error("--noise and --pgd are required for --mode pgd_noise")
+        out_dir = Path(args.out or "paper/figures/pgd_vs_noise")
+        return _pgd_noise_compare(Path(args.noise), Path(args.pgd), out_dir)
+
+    if not args.runs:
+        ap.error("--runs is required for --mode default")
+
+    return _run_default_mode(args)
 
 
 if __name__ == "__main__":

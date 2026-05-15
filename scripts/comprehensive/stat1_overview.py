@@ -22,23 +22,7 @@ from ._common import (
 )
 
 
-def stat1_overview():
-    noise_r = load_records("runs/main/noise/records.jsonl")
-    pgd_r = load_records("runs/main/pgd/records.jsonl")
-    llava_r = [r for r in noise_r if "llava" in r.get("model_id", "").lower()]
-
-    nd = np.array([r["edit_distance_norm"] for r in noise_r])
-    pd_ = np.array([r["edit_distance_norm"] for r in pgd_r])
-    ld = np.array([r["edit_distance_norm"] for r in llava_r])
-
-    fig, axes = plt.subplots(2, 2, figsize=(14, 11))
-    fig.subplots_adjust(hspace=0.42, wspace=0.35)
-
-    # ── A: Violin + strip (3 conditions) ──────────────────────────────
-    ax = axes[0, 0]
-    data = [nd, pd_, ld]
-    labels = ["Qwen\nNoise", "Qwen\nPGD", "LLaVA\nNoise"]
-    colors = [C_NOISE, C_PGD, C_LLAVA]
+def _draw_violin_box(ax, data, colors):
     vp = ax.violinplot(data, positions=[1, 2, 3], showmedians=False, showextrema=False, widths=0.55)
     for pc, c in zip(vp["bodies"], colors, strict=False):
         pc.set_facecolor(c)
@@ -60,7 +44,8 @@ def stat1_overview():
         box.set_facecolor(c)
         box.set_alpha(0.85)
 
-    rng = np.random.default_rng(42)
+
+def _draw_strip_with_means(ax, data, colors, rng):
     for xi, arr, c in zip([1, 2, 3], data, colors, strict=False):
         jit = rng.uniform(-0.08, 0.08, len(arr))
         ax.scatter(xi + jit, arr, s=55, color=c, edgecolors="white", lw=0.8, zorder=5)
@@ -74,6 +59,16 @@ def stat1_overview():
             color=c,
         )
 
+
+def _draw_panel_a(ax, nd, pd_, ld):
+    data = [nd, pd_, ld]
+    labels = ["Qwen\nNoise", "Qwen\nPGD", "LLaVA\nNoise"]
+    colors = [C_NOISE, C_PGD, C_LLAVA]
+    _draw_violin_box(ax, data, colors)
+
+    rng = np.random.default_rng(42)
+    _draw_strip_with_means(ax, data, colors, rng)
+
     ax.set_xticks([1, 2, 3])
     ax.set_xticklabels(labels, fontsize=10)
     ax.set_ylabel("Normalised edit distance")
@@ -82,10 +77,8 @@ def stat1_overview():
     despine(ax)
     _panel(ax, "A")
 
-    # ── B: Scatter — benign length vs edit distance ────────────────────
-    ax = axes[0, 1]
-    b_lens_n = [len(r["benign"]["tool_sequence"]) for r in noise_r]
-    b_lens_p = [len(r["benign"]["tool_sequence"]) for r in pgd_r]
+
+def _draw_scatter_points(ax, b_lens_n, b_lens_p, nd, pd_):
     ax.scatter(
         b_lens_n,
         nd,
@@ -108,12 +101,21 @@ def stat1_overview():
         zorder=4,
         alpha=0.9,
     )
-    # regression lines
+
+
+def _draw_regression_lines(ax, b_lens_n, b_lens_p, nd, pd_):
     for xs, ys, c in [(b_lens_n, nd, C_NOISE), (b_lens_p, pd_, C_PGD)]:
         if len(set(xs)) > 1:
             m, b, r, *_ = scipy_stats.linregress(xs, ys)
             xr = np.linspace(min(xs), max(xs), 50)
             ax.plot(xr, m * xr + b, color=c, lw=1.8, alpha=0.6, linestyle="--", label=f"r={r:.2f}")
+
+
+def _draw_panel_b(ax, noise_r, pgd_r, nd, pd_):
+    b_lens_n = [len(r["benign"]["tool_sequence"]) for r in noise_r]
+    b_lens_p = [len(r["benign"]["tool_sequence"]) for r in pgd_r]
+    _draw_scatter_points(ax, b_lens_n, b_lens_p, nd, pd_)
+    _draw_regression_lines(ax, b_lens_n, b_lens_p, nd, pd_)
     ax.set_xlabel("Benign trajectory length (steps)")
     ax.set_ylabel("Normalised edit distance")
     ax.set_title("Benign length vs attack drift", pad=8)
@@ -121,9 +123,8 @@ def stat1_overview():
     despine(ax)
     _panel(ax, "B")
 
-    # ── C: Correlation matrix ──────────────────────────────────────────
-    ax = axes[1, 0]
-    all_r = pgd_r  # only PGD has pgd_loss
+
+def _compute_corr_features(all_r):
     feats = {
         "ε": [r["epsilon"] for r in all_r],
         "b_len": [len(r["benign"]["tool_sequence"]) for r in all_r],
@@ -135,13 +136,10 @@ def stat1_overview():
     feat_names = list(feats.keys())
     arr = np.array([feats[k] for k in feat_names])
     corr = np.corrcoef(arr)
+    return feat_names, corr
 
-    cmap = LinearSegmentedColormap.from_list("rwb", ["#2166ac", "white", "#d73027"], N=256)
-    im = ax.imshow(corr, cmap=cmap, vmin=-1, vmax=1, aspect="auto")
-    ax.set_xticks(range(len(feat_names)))
-    ax.set_xticklabels(feat_names, rotation=30, ha="right", fontsize=9)
-    ax.set_yticks(range(len(feat_names)))
-    ax.set_yticklabels(feat_names, fontsize=9)
+
+def _annotate_corr_cells(ax, corr, feat_names):
     for i in range(len(feat_names)):
         for j in range(len(feat_names)):
             v = corr[i, j]
@@ -155,13 +153,31 @@ def stat1_overview():
                 color="black" if abs(v) < 0.5 else "white",
                 fontweight="bold",
             )
+
+
+def _draw_panel_c(fig, ax, pgd_r):
+    feat_names, corr = _compute_corr_features(pgd_r)
+    cmap = LinearSegmentedColormap.from_list("rwb", ["#2166ac", "white", "#d73027"], N=256)
+    im = ax.imshow(corr, cmap=cmap, vmin=-1, vmax=1, aspect="auto")
+    ax.set_xticks(range(len(feat_names)))
+    ax.set_xticklabels(feat_names, rotation=30, ha="right", fontsize=9)
+    ax.set_yticks(range(len(feat_names)))
+    ax.set_yticklabels(feat_names, fontsize=9)
+    _annotate_corr_cells(ax, corr, feat_names)
     cb = fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
     cb.set_label("Pearson r", fontsize=9)
     ax.set_title("Feature correlation matrix (PGD records)", pad=8)
     _panel(ax, "C")
 
-    # ── D: Grouped bar — tool call count change ────────────────────────
-    ax = axes[1, 1]
+
+def _tool_counts(records, key, all_tools):
+    c: Counter = Counter()
+    for r in records:
+        c.update(r[key]["tool_sequence"])
+    return [c.get(t, 0) for t in all_tools]
+
+
+def _draw_panel_d(ax, noise_r, pgd_r):
     all_tools = sorted(
         {
             t
@@ -174,15 +190,9 @@ def stat1_overview():
     x = np.arange(n_tools)
     w = 0.25
 
-    def tool_counts(records, key):
-        c: Counter = Counter()
-        for r in records:
-            c.update(r[key]["tool_sequence"])
-        return [c.get(t, 0) for t in all_tools]
-
-    b_cnt = tool_counts(pgd_r, "benign")
-    n_cnt = tool_counts(noise_r, "attacked")
-    p_cnt = tool_counts(pgd_r, "attacked")
+    b_cnt = _tool_counts(pgd_r, "benign", all_tools)
+    n_cnt = _tool_counts(noise_r, "attacked", all_tools)
+    p_cnt = _tool_counts(pgd_r, "attacked", all_tools)
 
     ax.bar(x - w, b_cnt, w, color=C_BENIGN, label="Benign", edgecolor="white", lw=0.5)
     ax.bar(x, n_cnt, w, color=C_NOISE, label="Noise atk", edgecolor="white", lw=0.5)
@@ -194,6 +204,24 @@ def stat1_overview():
     ax.legend(fontsize=9)
     despine(ax)
     _panel(ax, "D")
+
+
+def stat1_overview():
+    noise_r = load_records("runs/main/noise/records.jsonl")
+    pgd_r = load_records("runs/main/pgd/records.jsonl")
+    llava_r = [r for r in noise_r if "llava" in r.get("model_id", "").lower()]
+
+    nd = np.array([r["edit_distance_norm"] for r in noise_r])
+    pd_ = np.array([r["edit_distance_norm"] for r in pgd_r])
+    ld = np.array([r["edit_distance_norm"] for r in llava_r])
+
+    fig, axes = plt.subplots(2, 2, figsize=(14, 11))
+    fig.subplots_adjust(hspace=0.42, wspace=0.35)
+
+    _draw_panel_a(axes[0, 0], nd, pd_, ld)
+    _draw_panel_b(axes[0, 1], noise_r, pgd_r, nd, pd_)
+    _draw_panel_c(fig, axes[1, 0], pgd_r)
+    _draw_panel_d(axes[1, 1], noise_r, pgd_r)
 
     fig.suptitle(
         "Comprehensive statistical overview of adversarial attack effects",

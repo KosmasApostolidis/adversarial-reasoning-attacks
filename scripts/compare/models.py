@@ -46,64 +46,62 @@ def _collect(runs_root: Path) -> dict[tuple[str, str], list[dict]]:
     return map_
 
 
+def _compute_model_stats(data: dict, mdl: str) -> tuple[list[float], list[float]]:
+    means, errs = [], []
+    for atk in ATTACKS:
+        recs = data[(atk, mdl)]
+        eds = [r["edit_distance_norm"] for r in recs]
+        means.append(statistics.mean(eds) if eds else 0.0)
+        errs.append(statistics.stdev(eds) / np.sqrt(len(eds)) if len(eds) > 1 else 0.0)
+    return means, errs
+
+
+def _draw_model_bars(
+    ax, mdl: str, mdl_label: str, x: np.ndarray, w: float, i: int,
+    means: list[float], errs: list[float],
+) -> None:
+    offset = (i - 0.5) * w
+    bars = ax.bar(
+        x + offset, means, w, yerr=errs, label=mdl_label,
+        color=[ATTACK_COLOR[a] for a in ATTACKS],
+        edgecolor="black", hatch=MODEL_HATCH[mdl],
+        linewidth=0.8, capsize=3,
+        alpha=0.95 if mdl == "qwen" else 0.7,
+    )
+    for b, v in zip(bars, means, strict=False):
+        ax.text(b.get_x() + b.get_width() / 2, v + 0.012, f"{v:.2f}",
+                ha="center", va="bottom", fontsize=8)
+
+
+def _build_model_legend_handles() -> list:
+    return [
+        plt.Rectangle((0, 0), 1, 1, fc="#888", ec="black",
+                      hatch=MODEL_HATCH[m],
+                      alpha=0.95 if m == "qwen" else 0.7)
+        for m, _ in MODELS
+    ]
+
+
+def _decorate_grouped_axes(ax, x: np.ndarray) -> None:
+    ax.set_xticks(x)
+    ax.set_xticklabels([ATTACK_LABEL[a] for a in ATTACKS])
+    ax.set_ylabel("Tool-sequence edit distance (normalized)")
+    ax.set_ylim(0, max(0.8, ax.get_ylim()[1]))
+    ax.set_title("Cross-model attack landscape (smoke, n=5, ε=8/255)",
+                 fontsize=11, weight="bold")
+    ax.grid(axis="y", linestyle=":", alpha=0.4)
+    handles = _build_model_legend_handles()
+    ax.legend(handles, [lbl for _, lbl in MODELS], loc="upper left", frameon=False)
+
+
 def _grouped_bar(data: dict, out: Path) -> None:
     fig, ax = plt.subplots(figsize=(8.5, 5), dpi=200)
     x = np.arange(len(ATTACKS))
     w = 0.36
     for i, (mdl, mdl_label) in enumerate(MODELS):
-        means, errs = [], []
-        for atk in ATTACKS:
-            recs = data[(atk, mdl)]
-            eds = [r["edit_distance_norm"] for r in recs]
-            means.append(statistics.mean(eds) if eds else 0.0)
-            errs.append(statistics.stdev(eds) / np.sqrt(len(eds)) if len(eds) > 1 else 0.0)
-        offset = (i - 0.5) * w
-        bars = ax.bar(
-            x + offset,
-            means,
-            w,
-            yerr=errs,
-            label=mdl_label,
-            color=[ATTACK_COLOR[a] for a in ATTACKS],
-            edgecolor="black",
-            hatch=MODEL_HATCH[mdl],
-            linewidth=0.8,
-            capsize=3,
-            alpha=0.95 if mdl == "qwen" else 0.7,
-        )
-        for b, v in zip(bars, means, strict=False):
-            ax.text(
-                b.get_x() + b.get_width() / 2,
-                v + 0.012,
-                f"{v:.2f}",
-                ha="center",
-                va="bottom",
-                fontsize=8,
-            )
-
-    ax.set_xticks(x)
-    ax.set_xticklabels([ATTACK_LABEL[a] for a in ATTACKS])
-    ax.set_ylabel("Tool-sequence edit distance (normalized)")
-    ax.set_ylim(0, max(0.8, ax.get_ylim()[1]))
-    ax.set_title(
-        "Cross-model attack landscape (smoke, n=5, ε=8/255)",
-        fontsize=11,
-        weight="bold",
-    )
-    ax.grid(axis="y", linestyle=":", alpha=0.4)
-    handles = [
-        plt.Rectangle(
-            (0, 0),
-            1,
-            1,
-            fc="#888",
-            ec="black",
-            hatch=MODEL_HATCH[m],
-            alpha=0.95 if m == "qwen" else 0.7,
-        )
-        for m, _ in MODELS
-    ]
-    ax.legend(handles, [lbl for _, lbl in MODELS], loc="upper left", frameon=False)
+        means, errs = _compute_model_stats(data, mdl)
+        _draw_model_bars(ax, mdl, mdl_label, x, w, i, means, errs)
+    _decorate_grouped_axes(ax, x)
     fig.tight_layout()
     out.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(out, bbox_inches="tight")

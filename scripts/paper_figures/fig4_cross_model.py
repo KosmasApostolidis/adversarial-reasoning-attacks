@@ -15,20 +15,7 @@ from ._common import (
 )
 
 
-def fig4_cross_model() -> None:
-    all_noise = load_records("runs/main/noise/records.jsonl")
-    qwen_recs = [r for r in all_noise if "qwen" in r.get("model_id", "").lower()]
-    llava_recs = [r for r in all_noise if "llava" in r.get("model_id", "").lower()]
-
-    qd = np.array([r["edit_distance_norm"] for r in qwen_recs])
-    ld = np.array([r["edit_distance_norm"] for r in llava_recs])
-    eps = qwen_recs[0]["epsilon"]
-
-    fig, axes = plt.subplots(1, 2, figsize=(11, 4.5))
-    fig.subplots_adjust(wspace=0.36)
-
-    # Violin + strip
-    ax = axes[0]
+def _draw_violin_panel(ax, qd: np.ndarray, ld: np.ndarray, eps: float) -> None:
     parts = ax.violinplot([qd, ld], positions=[1, 2], showmedians=True, showextrema=False)
     for pc, color in zip(parts["bodies"], [C_BENIGN, C_LLAVA], strict=False):
         pc.set_facecolor(color)
@@ -63,25 +50,44 @@ def fig4_cross_model() -> None:
         )
     ax.set_ylim(bottom=0)
     despine(ax)
-    _panel_label(ax, "A")
 
-    # Per-patient grouped bars
-    ax2 = axes[1]
-    n = min(len(qwen_recs), len(llava_recs))
+
+def _draw_per_patient_panel(
+    ax, qd: np.ndarray, ld: np.ndarray, qwen_recs: list[dict], n: int
+) -> None:
     x = np.arange(n)
     w = 0.35
     pids = [r["sample_id"].split("_p")[1].replace("_s", "·") for r in qwen_recs[:n]]
-    ax2.bar(x - w / 2, qd[:n], w, color=C_BENIGN, label="Qwen2.5-VL", edgecolor="white")
-    ax2.bar(x + w / 2, ld[:n], w, color=C_LLAVA, label="LLaVA-v1.6", edgecolor="white")
-    ax2.set_xticks(x)
-    ax2.set_xticklabels(pids, fontsize=8)
-    ax2.set_xlabel("Patient ID")
-    ax2.set_ylabel("Normalised edit distance")
-    ax2.set_title("Per-patient cross-model comparison", pad=8)
-    ax2.legend()
-    ax2.set_ylim(bottom=0)
-    despine(ax2)
-    _panel_label(ax2, "B")
+    ax.bar(x - w / 2, qd[:n], w, color=C_BENIGN, label="Qwen2.5-VL", edgecolor="white")
+    ax.bar(x + w / 2, ld[:n], w, color=C_LLAVA, label="LLaVA-v1.6", edgecolor="white")
+    ax.set_xticks(x)
+    ax.set_xticklabels(pids, fontsize=8)
+    ax.set_xlabel("Patient ID")
+    ax.set_ylabel("Normalised edit distance")
+    ax.set_title("Per-patient cross-model comparison", pad=8)
+    ax.legend()
+    ax.set_ylim(bottom=0)
+    despine(ax)
+
+
+def fig4_cross_model() -> None:
+    all_noise = load_records("runs/main/noise/records.jsonl")
+    qwen_recs = [r for r in all_noise if "qwen" in r.get("model_id", "").lower()]
+    llava_recs = [r for r in all_noise if "llava" in r.get("model_id", "").lower()]
+
+    qd = np.array([r["edit_distance_norm"] for r in qwen_recs])
+    ld = np.array([r["edit_distance_norm"] for r in llava_recs])
+    eps = qwen_recs[0]["epsilon"]
+
+    fig, axes = plt.subplots(1, 2, figsize=(11, 4.5))
+    fig.subplots_adjust(wspace=0.36)
+
+    _draw_violin_panel(axes[0], qd, ld, eps)
+    _panel_label(axes[0], "A")
+
+    n = min(len(qwen_recs), len(llava_recs))
+    _draw_per_patient_panel(axes[1], qd, ld, qwen_recs, n)
+    _panel_label(axes[1], "B")
 
     fig.suptitle(
         "LLaVA is more sensitive to uniform-noise perturbations than Qwen2.5-VL",
