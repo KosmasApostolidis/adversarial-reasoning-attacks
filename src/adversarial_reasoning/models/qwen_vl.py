@@ -51,21 +51,16 @@ class QwenVL(VLMBase):
         # Qwen2.5-VL processor expects PIL → tensor via the processor pipeline.
         return self.processor(images=image, return_tensors="pt")
 
-    def generate(
+    def _build_processor_inputs(
         self,
         image: Image.Image,
         prompt: str,
-        *,
-        max_new_tokens: int = 512,
-        temperature: float = 0.0,
-        seed: int | None = None,
-        tools_schema: list[dict] | None = None,
-    ) -> VLMGenerateResult:
-        if seed is not None:
-            torch.manual_seed(seed)
-
-        # Qwen2.5-VL chat template. Tool schema injection via `tools` argument
-        # when `tools_schema` is supplied — native JSON function calling.
+        tools_schema: list[dict] | None,
+    ) -> Any:
+        """Apply Qwen2.5-VL chat template and run the processor; returns inputs
+        moved to ``self.model.device``. ``tools_schema`` injects native JSON
+        function-calling when supplied.
+        """
         messages: list[dict] = [
             {
                 "role": "user",
@@ -81,12 +76,37 @@ class QwenVL(VLMBase):
             add_generation_prompt=True,
             tools=tools_schema,
         )
-        inputs = self.processor(
+        return self.processor(
             text=[text],
             images=[image],
             return_tensors="pt",
             padding=True,
         ).to(self.model.device)
+
+    def _decode_generated(self, out: Any, prompt_len: int) -> VLMGenerateResult:
+        """Slice the generated suffix, batch-decode, and wrap as VLMGenerateResult."""
+        generated_ids = out.sequences[:, prompt_len:]
+        text_out = self.processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
+        return VLMGenerateResult(
+            text=text_out,
+            tokens=generated_ids[0].tolist(),
+            finish_reason="stop",
+        )
+
+    def generate(
+        self,
+        image: Image.Image,
+        prompt: str,
+        *,
+        max_new_tokens: int = 512,
+        temperature: float = 0.0,
+        seed: int | None = None,
+        tools_schema: list[dict] | None = None,
+    ) -> VLMGenerateResult:
+        if seed is not None:
+            torch.manual_seed(seed)
+
+        inputs = self._build_processor_inputs(image, prompt, tools_schema)
 
         with torch.no_grad():
             out = self.model.generate(
@@ -98,13 +118,7 @@ class QwenVL(VLMBase):
                 output_scores=False,
             )
 
-        generated_ids = out.sequences[:, inputs.input_ids.shape[1] :]
-        text_out = self.processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
-        return VLMGenerateResult(
-            text=text_out,
-            tokens=generated_ids[0].tolist(),
-            finish_reason="stop",
-        )
+        return self._decode_generated(out, prompt_len=inputs.input_ids.shape[1])
 
     def forward_with_logits(  # type: ignore[override]
         self,
@@ -158,29 +172,9 @@ class QwenVL(VLMBase):
         if seed is not None:
             torch.manual_seed(seed)
 
-        messages: list[dict] = [
-            {
-                "role": "user",
-                "content": [
-                    {"type": "image", "image": template_image},
-                    {"type": "text", "text": prompt},
-                ],
-            }
-        ]
-        text = self.processor.apply_chat_template(
-            messages,
-            tokenize=False,
-            add_generation_prompt=True,
-            tools=tools_schema,
-        )
         # Run full processor so image-token count matches pixel_values; we then
         # discard processor's pixel_values and use the (perturbed) ones we got.
-        proc_inputs = self.processor(
-            text=[text],
-            images=[template_image],
-            return_tensors="pt",
-            padding=True,
-        ).to(self.model.device)
+        proc_inputs = self._build_processor_inputs(template_image, prompt, tools_schema)
 
         with torch.no_grad():
             out = self.model.generate(
@@ -195,13 +189,7 @@ class QwenVL(VLMBase):
                 output_scores=False,
             )
 
-        generated_ids = out.sequences[:, proc_inputs["input_ids"].shape[1] :]
-        text_out = self.processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
-        return VLMGenerateResult(
-            text=text_out,
-            tokens=generated_ids[0].tolist(),
-            finish_reason="stop",
-        )
+        return self._decode_generated(out, prompt_len=proc_inputs["input_ids"].shape[1])
 
     def prepare_attack_inputs(
         self,

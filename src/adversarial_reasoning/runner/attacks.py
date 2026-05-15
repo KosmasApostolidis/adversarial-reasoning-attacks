@@ -114,6 +114,46 @@ def _build_attack_target(
     return target_from_benign(vlm, benign, prompt_input_ids)
 
 
+def _prepare_attack_tensors(
+    *,
+    mode: str,
+    vlm: Any,
+    sample: Any,
+    benign: Trajectory,
+    target_tool: str,
+) -> tuple[Any, Any, Any, dict[str, Any], dict[str, Any]]:
+    """Build the tensor bundle a gradient attack needs.
+
+    Returns ``(pixel_values, prompt_input_ids, target_ids, fwd_kwargs,
+    model_kwargs)``. ``fwd_kwargs`` extends ``model_kwargs`` with the
+    ``[prompt ‖ target]`` attention mask required by the differentiable
+    forward pass; ``model_kwargs`` is the same dict without it, used to
+    reseed the agent after the attack.
+    """
+    import torch
+
+    attack_in = vlm.prepare_attack_inputs(sample.image, sample.prompt)
+    pixel_values = attack_in["pixel_values"]
+    prompt_input_ids = attack_in["input_ids"]
+    prompt_attn = attack_in.get("attention_mask")
+    model_kwargs = {k: v for k, v in attack_in.items() if k not in _NON_GEN_KEYS}
+
+    target_ids = _build_attack_target(
+        mode=mode,
+        vlm=vlm,
+        benign=benign,
+        prompt_input_ids=prompt_input_ids,
+        target_tool=target_tool,
+    )
+
+    fwd_kwargs: dict[str, Any] = dict(model_kwargs)
+    if prompt_attn is not None:
+        fwd_kwargs["attention_mask"] = torch.cat(
+            [prompt_attn, torch.ones_like(target_ids)], dim=-1
+        )
+    return pixel_values, prompt_input_ids, target_ids, fwd_kwargs, model_kwargs
+
+
 def _reshape_and_reinfer(
     *,
     res: Any,  # AttackResult
@@ -193,8 +233,6 @@ def run_gradient_attack(
       for LLaVA-Next, etc.) flow through ``prepare_attack_inputs`` ⇒
       ``forward_kwargs`` ⇒ ``gen_kwargs`` without per-model branching.
     """
-    import torch
-
     if mode not in GRADIENT_MODES:
         raise ValueError(f"Unknown gradient attack mode: {mode}")
     if not hasattr(vlm, "prepare_attack_inputs"):
@@ -202,23 +240,15 @@ def run_gradient_attack(
             f"{type(vlm).__name__}.prepare_attack_inputs missing — needed for {mode}."
         )
 
-    attack_in = vlm.prepare_attack_inputs(sample.image, sample.prompt)
-    pixel_values = attack_in["pixel_values"]
-    prompt_input_ids = attack_in["input_ids"]
-    prompt_attn = attack_in.get("attention_mask")
-    model_kwargs = {k: v for k, v in attack_in.items() if k not in _NON_GEN_KEYS}
-
-    target_ids = _build_attack_target(
-        mode=mode,
-        vlm=vlm,
-        benign=benign,
-        prompt_input_ids=prompt_input_ids,
-        target_tool=target_tool,
+    pixel_values, prompt_input_ids, target_ids, fwd_kwargs, model_kwargs = (
+        _prepare_attack_tensors(
+            mode=mode,
+            vlm=vlm,
+            sample=sample,
+            benign=benign,
+            target_tool=target_tool,
+        )
     )
-
-    fwd_kwargs: dict[str, Any] = dict(model_kwargs)
-    if prompt_attn is not None:
-        fwd_kwargs["attention_mask"] = torch.cat([prompt_attn, torch.ones_like(target_ids)], dim=-1)
 
     attack = build_attack(
         mode,

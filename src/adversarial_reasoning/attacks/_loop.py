@@ -129,6 +129,15 @@ def _run_one_restart(
     )
 
 
+def _seed_torch_all(seed: int | None) -> None:
+    """Pin torch CPU and CUDA RNGs for reproducible restarts."""
+    if seed is None:
+        return
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
+
+
 def _better_restart(best: AttackResult | None, candidate: AttackResult) -> AttackResult:
     """Pick smaller ``loss_final``; prefer any finite restart over NaN."""
     # NaN guard: ``finite < NaN`` is False, so a NaN-loss first restart
@@ -184,10 +193,7 @@ def linf_pgd_loop(
             extra=extra,
         )
 
-    if seed is not None:
-        torch.manual_seed(seed)
-        if torch.cuda.is_available():
-            torch.cuda.manual_seed_all(seed)
+    _seed_torch_all(seed)
 
     best: AttackResult | None = None
     for restart in range(n_restarts):
