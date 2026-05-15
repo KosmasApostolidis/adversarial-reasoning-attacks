@@ -13,6 +13,16 @@ Design notes
 - Random restart picks the perturbation with the lowest ``loss_final``
   (smaller-is-better convention from the attacker's perspective).
 
+Sign convention
+---------------
+TokenTargetLoss already encodes targeted/untargeted via ±CE. The loop
+always descends on the returned scalar (``step_sign=-1``):
+
+  - untargeted (loss=-CE):  -sign(grad(-CE)) = +sign(grad(CE)) → CE↑
+  - targeted   (loss=+CE):  -sign(grad(+CE)) = -sign(grad(CE)) → CE↓
+
+APGD uses the same convention (``- sign * eta * grad.sign()``).
+
 Refactor (2026-04-25): the loss body and step+restart loop were extracted
 into :mod:`adversarial_reasoning.attacks.loss` and
 :mod:`adversarial_reasoning.attacks._loop` so PGD, APGD, and
@@ -28,7 +38,7 @@ from typing import Any
 import torch
 
 from ._epsilon import _LINF_EPSILON_8
-from ._loop import linf_pgd_loop
+from ._loop import LinfPGDConfig, linf_pgd_loop
 from .base import AttackBase, AttackResult
 from .loss import TokenTargetLoss
 
@@ -57,15 +67,7 @@ class PGDAttack(AttackBase):
         forward_kwargs: dict[str, Any] | None = None,
         **_ignored: Any,
     ) -> AttackResult:
-        """Run PGD-L∞.
-
-        target: token-id LongTensor (B, T_target) representing the token
-            sequence whose log-prob we push (up for targeted, down otherwise).
-        forward_kwargs: model-specific extras (e.g. Qwen `image_grid_thw`,
-            LLaVA-Next `image_sizes`, plus the `attention_mask` covering
-            `[prompt ‖ target]`). The attack harness constructs these via
-            `vlm.prepare_attack_inputs(...)` before calling `run`.
-        """
+        """Run PGD-L∞. See module docstring for ±CE sign convention."""
         if not getattr(vlm, "supports_gradients", False):
             raise ValueError(f"VLM backend {vlm.__class__.__name__} does not support gradients.")
 
@@ -73,15 +75,17 @@ class PGDAttack(AttackBase):
         if x0.ndim == 3:
             x0 = x0.unsqueeze(0)
 
-        alpha = self.alpha if self.alpha is not None else self.epsilon / _PGD_ALPHA_DIVISOR
-        # TokenTargetLoss already encodes targeted/untargeted semantics via
-        # ±CE. The loop always descends on the returned scalar (step_sign=-1)
-        # so that:
-        #   untargeted (loss=-CE):  -sign(grad(-CE)) = +sign(grad(CE)) → CE↑
-        #   targeted   (loss=+CE):  -sign(grad(+CE)) = -sign(grad(CE)) → CE↓
-        # APGD uses the same convention (``- sign * eta * grad.sign()``).
-        step_sign = -1.0
-
+        cfg = LinfPGDConfig(
+            epsilon=self.epsilon,
+            alpha=self.alpha if self.alpha is not None else self.epsilon / _PGD_ALPHA_DIVISOR,
+            n_iter=self.steps,
+            n_restarts=self.random_restarts,
+            step_sign=-1.0,
+            clip_min=self.clip_min,
+            clip_max=self.clip_max,
+            seed=self.seed,
+            static_metadata={"targeted": self.targeted},
+        )
         return linf_pgd_loop(
             loss_fn=TokenTargetLoss(targeted=self.targeted),
             vlm=vlm,
@@ -89,13 +93,5 @@ class PGDAttack(AttackBase):
             prompt_tokens=prompt_tokens,
             target=target,
             gen_kwargs=forward_kwargs or {},
-            epsilon=self.epsilon,
-            alpha=alpha,
-            n_iter=self.steps,
-            n_restarts=self.random_restarts,
-            step_sign=step_sign,
-            clip_min=self.clip_min,
-            clip_max=self.clip_max,
-            static_metadata={"targeted": self.targeted},
-            seed=self.seed,
+            cfg=cfg,
         )

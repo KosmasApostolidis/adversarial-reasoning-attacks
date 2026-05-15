@@ -23,7 +23,7 @@ import numpy as np
 import torch
 from PIL import Image
 
-from ..attacks._epsilon import _LINF_EPSILON_16, _LINF_EPSILON_2
+from ..attacks._epsilon import _LINF_EPSILON_2, _LINF_EPSILON_16
 
 
 @dataclass(frozen=True)

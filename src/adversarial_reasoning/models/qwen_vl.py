@@ -28,7 +28,7 @@ class QwenVL(VLMBase):
         # CI + lightweight tests don't pay the cost.
         from pathlib import Path
 
-        from transformers import AutoProcessor, AutoModelForVision2Seq
+        from transformers import AutoModelForVision2Seq, AutoProcessor
 
         self.model_id = hf_id
         from_pretrained_kwargs: dict[str, Any] = {}

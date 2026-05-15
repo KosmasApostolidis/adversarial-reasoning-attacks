@@ -89,16 +89,20 @@ class LlavaNext(VLMBase):
             messages: list[dict] = []
             if system_block:
                 messages.append({"role": "system", "content": system_block})
-            messages.append({
-                "role": "user",
-                "content": [
-                    {"type": "image"},
-                    {"type": "text", "text": prompt},
-                ],
-            })
+            messages.append(
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "image"},
+                        {"type": "text", "text": prompt},
+                    ],
+                }
+            )
             try:
                 return tokenizer.apply_chat_template(
-                    messages, tokenize=False, add_generation_prompt=True,
+                    messages,
+                    tokenize=False,
+                    add_generation_prompt=True,
                 )
             except (ValueError, TypeError) as exc:
                 _LOG.warning(

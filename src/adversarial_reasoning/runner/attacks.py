@@ -1,4 +1,15 @@
-"""Perturbation primitives + gradient-attack dispatch."""
+"""Perturbation primitives + gradient-attack dispatch.
+
+Notes
+-----
+- ε is applied in the *processor-normalised* pixel domain (CLIP std ≈
+  0.27), so a pixel-domain ε of 8/255 corresponds to ~0.116 here.
+  Keeping it normalised matches the noise mode apples-to-apples.
+- Clip bounds [-3, 3] generously cover the normalised range.
+- Model-family extras (``image_grid_thw`` for Qwen, ``image_sizes``
+  for LLaVA-Next, etc.) flow through ``prepare_attack_inputs`` ⇒
+  ``forward_kwargs`` ⇒ ``gen_kwargs`` without per-model branching.
+"""
 
 from __future__ import annotations
 
@@ -19,9 +30,9 @@ from ..attacks.targets import (
     target_from_trajectory,
 )
 from ..attacks.trajectory_drift import TrajectoryDriftPGD
+from .config import GRADIENT_MODES
 
 _ATK_CLIP_BOUND: float = 3.0  # pixel-value clipping for normalized tensors
-from .config import GRADIENT_MODES
 
 
 def perturb_noise(image: Image.Image, epsilon: float, seed: int) -> Image.Image:
@@ -148,9 +159,7 @@ def _prepare_attack_tensors(
 
     fwd_kwargs: dict[str, Any] = dict(model_kwargs)
     if prompt_attn is not None:
-        fwd_kwargs["attention_mask"] = torch.cat(
-            [prompt_attn, torch.ones_like(target_ids)], dim=-1
-        )
+        fwd_kwargs["attention_mask"] = torch.cat([prompt_attn, torch.ones_like(target_ids)], dim=-1)
     return pixel_values, prompt_input_ids, target_ids, fwd_kwargs, model_kwargs
 
 
@@ -169,8 +178,6 @@ def _reshape_and_reinfer(
     target_step_k: int,
 ) -> Any:  # Trajectory
     """Reshape perturbed tensor, re-run agent, attach attack metadata."""
-    import torch
-
     perturbed_pv = res.perturbed_image
     if perturbed_pv.ndim == pixel_values.ndim - 1:
         perturbed_pv = perturbed_pv.unsqueeze(0)
@@ -195,6 +202,46 @@ def _reshape_and_reinfer(
     return attacked
 
 
+def _check_gradient_attack_inputs(mode: str, vlm: Any) -> None:
+    """Reject unknown modes and VLMs missing the differentiable forward path."""
+    if mode not in GRADIENT_MODES:
+        raise ValueError(f"Unknown gradient attack mode: {mode}")
+    if not hasattr(vlm, "prepare_attack_inputs"):
+        raise NotImplementedError(
+            f"{type(vlm).__name__}.prepare_attack_inputs missing — needed for {mode}."
+        )
+
+
+def _dispatch_attack(
+    *,
+    mode: str,
+    vlm: Any,
+    pixel_values: Any,
+    prompt_input_ids: Any,
+    target_ids: Any,
+    fwd_kwargs: dict[str, Any],
+    epsilon: float,
+    steps: int,
+    target_tool: str,
+    target_step_k: int,
+) -> Any:
+    """Build the attack for ``mode`` and run it against the prepared tensors."""
+    attack = build_attack(
+        mode,
+        epsilon=epsilon,
+        steps=steps,
+        target_tool=target_tool,
+        target_step_k=target_step_k,
+    )
+    return attack.run(
+        vlm=vlm,
+        image=pixel_values,
+        prompt_tokens=prompt_input_ids,
+        target=target_ids,
+        forward_kwargs=fwd_kwargs,
+    )
+
+
 def run_gradient_attack(
     *,
     mode: str,
@@ -210,61 +257,27 @@ def run_gradient_attack(
     target_tool: str = "escalate_to_specialist",
     target_step_k: int = 0,
 ) -> Trajectory:
-    """Run a gradient-based attack on the model's normalised pixel tensor,
-    then re-run the agent on the perturbed pixels.
-
-    Dispatches by ``mode`` to :mod:`adversarial_reasoning.attacks.targets`
-    for target-token construction:
-
-      - ``pgd`` / ``apgd``: benign first tool-call block — drop benign
-        likelihood.
-      - ``targeted_tool``: forced ``target_tool`` tool-call block — push
-        attacker-chosen likelihood.
-      - ``trajectory_drift``: concat of all benign tool-call blocks —
-        KL ascent on the full benign trajectory.
-
-    Notes
-    -----
-    - ε is applied in the *processor-normalised* pixel domain (CLIP std ≈
-      0.27), so a pixel-domain ε of 8/255 corresponds to ~0.116 here.
-      Keeping it normalised matches the noise mode apples-to-apples.
-    - Clip bounds [-3, 3] generously cover the normalised range.
-    - Model-family extras (``image_grid_thw`` for Qwen, ``image_sizes``
-      for LLaVA-Next, etc.) flow through ``prepare_attack_inputs`` ⇒
-      ``forward_kwargs`` ⇒ ``gen_kwargs`` without per-model branching.
-    """
-    if mode not in GRADIENT_MODES:
-        raise ValueError(f"Unknown gradient attack mode: {mode}")
-    if not hasattr(vlm, "prepare_attack_inputs"):
-        raise NotImplementedError(
-            f"{type(vlm).__name__}.prepare_attack_inputs missing — needed for {mode}."
-        )
-
-    pixel_values, prompt_input_ids, target_ids, fwd_kwargs, model_kwargs = (
-        _prepare_attack_tensors(
-            mode=mode,
-            vlm=vlm,
-            sample=sample,
-            benign=benign,
-            target_tool=target_tool,
-        )
+    """Run a gradient attack then re-run the agent. See module docstring for details."""
+    _check_gradient_attack_inputs(mode, vlm)
+    pixel_values, prompt_input_ids, target_ids, fwd_kwargs, model_kwargs = _prepare_attack_tensors(
+        mode=mode,
+        vlm=vlm,
+        sample=sample,
+        benign=benign,
+        target_tool=target_tool,
     )
-
-    attack = build_attack(
-        mode,
+    res = _dispatch_attack(
+        mode=mode,
+        vlm=vlm,
+        pixel_values=pixel_values,
+        prompt_input_ids=prompt_input_ids,
+        target_ids=target_ids,
+        fwd_kwargs=fwd_kwargs,
         epsilon=epsilon,
         steps=steps,
         target_tool=target_tool,
         target_step_k=target_step_k,
     )
-    res = attack.run(
-        vlm=vlm,
-        image=pixel_values,
-        prompt_tokens=prompt_input_ids,
-        target=target_ids,
-        forward_kwargs=fwd_kwargs,
-    )
-
     return _reshape_and_reinfer(
         res=res,
         pixel_values=pixel_values,

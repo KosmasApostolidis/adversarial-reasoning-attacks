@@ -32,7 +32,7 @@ from typing import Any
 import torch
 
 from ._epsilon import _LINF_EPSILON_8
-from ._loop import linf_pgd_loop
+from ._loop import LinfPGDConfig, linf_pgd_loop
 from .base import AttackBase, AttackResult
 from .loss import TrajectoryDriftLoss
 
@@ -65,10 +65,7 @@ class TrajectoryDriftPGD(AttackBase):
         x0 = image.detach().clone()
         if x0.ndim == 3:
             x0 = x0.unsqueeze(0)
-
         gen_kwargs = forward_kwargs or {}
-        alpha = self.alpha if self.alpha is not None else self.epsilon / 4.0
-
         # Compute & cache the benign reference distribution once (no_grad).
         loss_fn = TrajectoryDriftLoss.from_benign(
             vlm=vlm,
@@ -77,16 +74,9 @@ class TrajectoryDriftPGD(AttackBase):
             target=target,
             gen_kwargs=gen_kwargs,
         )
-
-        result = linf_pgd_loop(
-            loss_fn=loss_fn,
-            vlm=vlm,
-            x0=x0,
-            prompt_tokens=prompt_tokens,
-            target=target,
-            gen_kwargs=gen_kwargs,
+        cfg = LinfPGDConfig(
             epsilon=self.epsilon,
-            alpha=alpha,
+            alpha=self.alpha if self.alpha is not None else self.epsilon / 4.0,
             n_iter=self.steps,
             n_restarts=self.random_restarts,
             step_sign=-1.0,  # descend on -KL ⇒ ascend on KL (diverge from benign)
@@ -94,8 +84,16 @@ class TrajectoryDriftPGD(AttackBase):
             clip_max=self.clip_max,
             seed=self.seed,
         )
-        # Preserve the legacy metadata key. ``loss_final = -KL`` for the
-        # winning restart, so ``kl_final = -loss_final``.
+        result = linf_pgd_loop(
+            loss_fn=loss_fn,
+            vlm=vlm,
+            x0=x0,
+            prompt_tokens=prompt_tokens,
+            target=target,
+            gen_kwargs=gen_kwargs,
+            cfg=cfg,
+        )
+        # ``loss_final = -KL`` so ``kl_final = -loss_final``.
         return replace(
             result,
             metadata={**result.metadata, "kl_final": -result.loss_final},
