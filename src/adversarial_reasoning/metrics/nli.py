@@ -125,6 +125,6 @@ def entailment_probs(pairs: list[tuple[str, str]]) -> list[float]:
             ).to(device)
             logits = model(**inputs).logits
             probs = torch.softmax(logits, dim=-1)[:, entail_idx]
-            for (orig_i, _, _), p_val in zip(batch, probs.tolist()):
+            for (orig_i, _, _), p_val in zip(batch, probs.tolist(), strict=True):
                 out[orig_i] = float(p_val)
     return out

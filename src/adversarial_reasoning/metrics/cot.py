@@ -25,6 +25,8 @@ import re
 from collections.abc import Callable
 from typing import Any
 
+from .._text_utils import find_balanced_close as _find_balanced_close
+
 EntailmentFn = Callable[[str, str], float]
 
 REFUSAL_HYPOTHESIS = (
@@ -39,9 +41,6 @@ _CLINICAL_NOUNS = (
     "tumor", "tumour", "psa", "mri", "ct", "ultrasound", "diagnosis",
     "treatment", "imaging", "symptom", "finding",
 )
-
-
-from .._text_utils import find_balanced_close as _find_balanced_close
 
 
 def clean_cot(text: str) -> str:

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import os
 import sys
@@ -212,15 +213,12 @@ def _process_sample(
             f_out.write(json.dumps(rec, default=str) + "\n")
             # Flush + fsync per record so an OS-kill (OOM, power loss) cannot
             # truncate the trailing samples of a long sweep. Page-cache loss
-            # otherwise loses minutes of GPU compute silently.
+            # otherwise loses minutes of GPU compute silently. ``suppress``
+            # ignores fsync failures on filesystems that refuse it (procfs,
+            # tmpfs subdirs) — flush already got the line into kernel buffers.
             f_out.flush()
-            try:
+            with contextlib.suppress(OSError):
                 os.fsync(f_out.fileno())
-            except OSError:
-                # Some filesystems (procfs, tmpfs subdirs) refuse fsync. The
-                # flush above still gets the line into kernel buffers; we'd
-                # rather continue the sweep than abort.
-                pass
             n_written += 1
     return n_written
 
@@ -280,7 +278,7 @@ def _iterate_records(
                         seed=seed,
                         f_out=f_out,
                     )
-                except _FATAL_EXC as exc:  # noqa: F821 — defined at module top
+                except _FATAL_EXC as exc:
                     # CUDA OOM / device-side asserts leave the allocator in an
                     # unrecoverable state; continuing would silently produce
                     # bogus tensors. Abort the sweep — caller can resume from

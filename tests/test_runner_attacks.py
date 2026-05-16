@@ -203,6 +203,7 @@ def test_run_gradient_attack_full_path(
       - mode-specific metadata is written onto the attacked Trajectory
     """
     import torch
+
     from adversarial_reasoning.agents.base import Trajectory
     from adversarial_reasoning.runner import attacks as runner_attacks
 

@@ -137,13 +137,16 @@ class InternVL2(VLMBase):
         # arbitrary Python under ``trust_remote_code=True``. If the revision
         # is not an immutable SHA we cannot audit *what* code runs — upstream
         # can swap it between pulls. Refuse unless explicitly bypassed.
-        if not _P(hf_id).is_dir() and not re.fullmatch(r"[0-9a-fA-F]{40}", revision):
-            if os.environ.get("ADREASON_ALLOW_MUTABLE_HF_REVISION") != "1":
-                raise ValueError(
-                    f"InternVL2/3 uses trust_remote_code=True; remote revision "
-                    f"must be a 40-char SHA, got {revision!r} for {hf_id!r}. "
-                    "Set ADREASON_ALLOW_MUTABLE_HF_REVISION=1 for local dev only."
-                )
+        if (
+            not _P(hf_id).is_dir()
+            and not re.fullmatch(r"[0-9a-fA-F]{40}", revision)
+            and os.environ.get("ADREASON_ALLOW_MUTABLE_HF_REVISION") != "1"
+        ):
+            raise ValueError(
+                f"InternVL2/3 uses trust_remote_code=True; remote revision "
+                f"must be a 40-char SHA, got {revision!r} for {hf_id!r}. "
+                "Set ADREASON_ALLOW_MUTABLE_HF_REVISION=1 for local dev only."
+            )
 
         self.model_id = hf_id
         self.max_tiles = max_tiles
