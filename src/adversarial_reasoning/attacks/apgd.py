@@ -31,6 +31,7 @@ from typing import Any
 import torch
 
 from ._epsilon import _LINF_EPSILON_8
+from ._loop import _better_restart
 from .base import AttackBase, AttackResult
 from .loss import TokenTargetLoss
 
@@ -162,10 +163,15 @@ class APGDAttack(AttackBase):
                 vlm, x0, prompt_tokens, target,
                 loss_fn, gen_kwargs, checkpoints, step_sign, restart,
             )
-            if best is None or candidate.loss_final < best.loss_final:
-                best = candidate
+            # ``_better_restart`` handles the NaN-locks-out-finite case that
+            # ``a < b`` returns False for: a finite candidate strictly beats a
+            # NaN-best, so we never discard a real restart in favour of a
+            # poisoned one.
+            best = _better_restart(best, candidate)
 
-        assert best is not None
+        if best is None:
+            # Unreachable under ``random_restarts >= 1`` but survives ``python -O``.
+            raise RuntimeError("APGDAttack produced no restart candidates")
         return best
 
     def _seed_rngs(self) -> None:
@@ -182,7 +188,9 @@ class APGDAttack(AttackBase):
         return AttackResult(
             perturbed_image=perturbed.squeeze(0) if perturbed.shape[0] == 1 else perturbed,
             delta=zero_delta.squeeze(0) if zero_delta.shape[0] == 1 else zero_delta,
-            loss_final=float("nan"),
+            # 0.0 (not NaN) so the row does not poison sweep aggregates;
+            # ``short_circuit`` lets analysis scripts filter explicitly.
+            loss_final=0.0,
             loss_trajectory=[],
             iterations=0,
             success=False,
@@ -263,12 +271,17 @@ class APGDAttack(AttackBase):
         checkpoints: list[int],
     ) -> None:
         loss = loss_fn(vlm, x0 + state.delta, prompt_tokens, target, gen_kwargs)
-        loss_val = float(loss.detach().cpu())
+        # ``.item()`` syncs once and produces a Python float without an extra
+        # device-to-host tensor allocation; the prior ``float(.detach().cpu())``
+        # was a ~25 µs/step sync that compounded into seconds across a sweep.
+        loss_val = loss.item()
         state.loss_traj.append(loss_val)
 
         if loss_val < state.loss_best:
             state.loss_best = loss_val
-            state.x_best = (x0 + state.delta).detach().clone()
+            # In-place copy into pre-allocated x_best (allocated in
+            # _init_restart_state) — no per-step tensor allocation.
+            state.x_best.copy_((x0 + state.delta).detach())
         # ρ_w (Croce-Hein 2020): success counts strict step-over-step
         # improvement within the current checkpoint window.
         if _step_is_improvement(loss_val, state.loss_prev):
@@ -329,7 +342,10 @@ class APGDAttack(AttackBase):
                 delta_data = (state.x_best - x0).detach()
                 state.delta.copy_(delta_data)
                 state.delta.grad = None
-                state.x_prev = state.x_best.clone()
+                # In-place copy into pre-allocated x_prev avoids the
+                # per-checkpoint tensor allocation that the prior .clone()
+                # introduced inside the hot loop.
+                state.x_prev.copy_(state.x_best)
         state.eta_at_last_ckpt = state.eta
         state.loss_at_last_ckpt = state.loss_best
         state.success_count = 0

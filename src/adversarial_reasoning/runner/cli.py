@@ -4,12 +4,23 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 import time
 import traceback
 from itertools import product
 from pathlib import Path
 from typing import IO, Any
+
+try:
+    import torch as _torch  # local alias so module import is cheap
+
+    _FATAL_EXC: tuple[type[BaseException], ...] = (
+        _torch.cuda.OutOfMemoryError,  # type: ignore[attr-defined]
+        MemoryError,
+    )
+except (ImportError, AttributeError):
+    _FATAL_EXC = (MemoryError,)
 
 from ..agents.medical_agent import MedicalAgent
 from ..metrics.trajectory import trajectory_edit_distance
@@ -199,6 +210,17 @@ def _process_sample(
                 task_id=task_id,
             )
             f_out.write(json.dumps(rec, default=str) + "\n")
+            # Flush + fsync per record so an OS-kill (OOM, power loss) cannot
+            # truncate the trailing samples of a long sweep. Page-cache loss
+            # otherwise loses minutes of GPU compute silently.
+            f_out.flush()
+            try:
+                os.fsync(f_out.fileno())
+            except OSError:
+                # Some filesystems (procfs, tmpfs subdirs) refuse fsync. The
+                # flush above still gets the line into kernel buffers; we'd
+                # rather continue the sweep than abort.
+                pass
             n_written += 1
     return n_written
 
@@ -224,6 +246,13 @@ def _iterate_records(
     f_out: IO[str],
 ) -> tuple[int, int]:
     """Sweep models × tasks × samples × seeds. Returns (n_records, n_errors)."""
+    import gc
+
+    try:
+        import torch as _torch_for_cleanup
+    except ImportError:  # pragma: no cover — torch is a hard dep
+        _torch_for_cleanup = None  # type: ignore[assignment]
+
     n_records = 0
     n_errors = 0
     for model_key in cfg.models:
@@ -251,6 +280,19 @@ def _iterate_records(
                         seed=seed,
                         f_out=f_out,
                     )
+                except _FATAL_EXC as exc:  # noqa: F821 — defined at module top
+                    # CUDA OOM / device-side asserts leave the allocator in an
+                    # unrecoverable state; continuing would silently produce
+                    # bogus tensors. Abort the sweep — caller can resume from
+                    # the JSONL records already on disk.
+                    print(
+                        f"[runner] FATAL {type(exc).__name__} — aborting "
+                        f"sweep at model={model_key} task={task_id} "
+                        f"sample={sample.sample_id}",
+                        file=sys.stderr,
+                        flush=True,
+                    )
+                    raise
                 except Exception as exc:
                     n_errors += 1
                     _log_sample_error(
@@ -260,6 +302,13 @@ def _iterate_records(
                         sample_id=sample.sample_id,
                         seed=seed,
                     )
+        # Free VRAM before loading the next surrogate. Without this a 4-model
+        # sweep on a 48 GB A6000 hits the allocator ceiling around model 3.
+        del agent
+        del vlm
+        gc.collect()
+        if _torch_for_cleanup is not None and _torch_for_cleanup.cuda.is_available():
+            _torch_for_cleanup.cuda.empty_cache()
     return n_records, n_errors
 
 

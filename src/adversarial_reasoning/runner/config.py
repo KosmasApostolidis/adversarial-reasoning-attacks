@@ -6,14 +6,14 @@ under the child's ``experiment:`` block (child wins on conflicts; nested
 dicts merge recursively; lists are replaced wholesale).
 
 Validation runs through :class:`ExperimentConfig` (pydantic v2,
-``extra="forbid"``) before the dataclass is built. Set
-``_LEGACY_CONFIG_LOADER=1`` in the environment to bypass schema validation
-during the v0.3.x → v0.4.x migration window.
+``extra="forbid"``) before the dataclass is built. The v0.3 → v0.4 migration
+escape hatch (``_LEGACY_CONFIG_LOADER=1``) was removed 2026-05-16: it bypassed
+``extra="forbid"`` and let typos through silently, which is exactly the
+failure mode the schema exists to prevent.
 """
 
 from __future__ import annotations
 
-import os
 from copy import deepcopy
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -88,19 +88,6 @@ def load_runner_config(exp_path: str | Path) -> RunnerConfig:
     # regardless of the CWD the runner is launched from.
     out_dir_raw = raw.get("output_dir", "runs")
     raw["output_dir"] = str((here.parent / Path(out_dir_raw)).resolve())
-    if os.environ.get("_LEGACY_CONFIG_LOADER") == "1":
-        return RunnerConfig(
-            name=raw["name"],
-            phase=str(raw.get("phase", "0")),
-            output_dir=Path(raw["output_dir"]),
-            seeds=list(raw.get("seeds", [0])),
-            models=list(raw["models"]),
-            tasks=list(raw["tasks"]),
-            attacks=list(raw["attacks"]),
-            task_overrides=dict(raw.get("task_overrides", {})),
-            attack_overrides=dict(raw.get("attack_overrides", {})),
-            epsilons_linf=list(raw.get("epsilons_linf", [])),
-        )
     # Local import avoids a runtime circular: schema imports RunnerConfig.
     from .schema import ExperimentConfig
 

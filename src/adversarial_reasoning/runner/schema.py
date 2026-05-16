@@ -30,10 +30,20 @@ class StatisticsBlock(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     test: str = "wilcoxon_signed_rank"
-    bootstrap_resamples: int = 1000
-    ci_level: float = 0.95
+    bootstrap_resamples: int = Field(default=1000, ge=1)
+    ci_level: float = Field(default=0.95, gt=0.0, lt=1.0)
     multiple_comparison_correction: str = "none"
-    bh_q: float | None = None  # Benjamini-Hochberg FDR q value
+    bh_q: float | None = Field(default=None, ge=0.0, le=1.0)
+
+    @field_validator("multiple_comparison_correction")
+    @classmethod
+    def _correction_known(cls, v: str) -> str:
+        allowed = {"none", "bonferroni", "holm", "bh", "benjamini_hochberg"}
+        if v not in allowed:
+            raise ValueError(
+                f"multiple_comparison_correction={v!r} not in {sorted(allowed)}"
+            )
+        return v
 
 
 class TransferEvaluationBlock(BaseModel):
@@ -67,6 +77,23 @@ class ExperimentConfig(BaseModel):
     @classmethod
     def _coerce_phase(cls, v: Any) -> str:
         return str(v)
+
+    @field_validator("epsilons_linf")
+    @classmethod
+    def _epsilons_nonneg(cls, v: list[float]) -> list[float]:
+        bad = [e for e in v if e < 0]
+        if bad:
+            raise ValueError(f"epsilons_linf entries must be >= 0; got {bad}")
+        return v
+
+    @field_validator("models", "tasks", "attacks")
+    @classmethod
+    def _nonempty(cls, v: list[str]) -> list[str]:
+        # Empty lists silently skip the sweep, producing a "0 records" run
+        # with no error. Treat as a config bug instead.
+        if not v:
+            raise ValueError("must contain at least one entry")
+        return v
 
     def to_runner_config(self, *, split: str = "dev") -> RunnerConfig:
         """Project the validated config onto the runtime dataclass."""

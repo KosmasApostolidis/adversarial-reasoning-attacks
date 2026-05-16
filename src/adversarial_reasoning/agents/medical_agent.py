@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, Any
 
 from PIL import Image
 
+from .._text_utils import find_balanced_close as _find_balanced_close_shared
 from ..models.base import VLMBase
 from ..tools.registry import ToolRegistry
 from .base import AgentBase, ToolCall, Trajectory
@@ -185,31 +186,7 @@ class MedicalAgent(AgentBase):
             cursor = end + 1
         return calls
 
-    @staticmethod
-    def _find_balanced_close(text: str, start: int) -> int:
-        """Return index of the `}` that closes the `{` at `text[start]`."""
-        depth = 0
-        in_string = False
-        escaped = False
-        for j in range(start, len(text)):
-            ch = text[j]
-            if in_string:
-                if escaped:
-                    escaped = False
-                elif ch == "\\":
-                    escaped = True
-                elif ch == '"':
-                    in_string = False
-                continue
-            if ch == '"':
-                in_string = True
-            elif ch == "{":
-                depth += 1
-            elif ch == "}":
-                depth -= 1
-                if depth == 0:
-                    return j
-        return -1
+    _find_balanced_close = staticmethod(_find_balanced_close_shared)
 
     def _dispatch(self, step: int, call_spec: dict[str, Any]) -> ToolCall:
         name = next(

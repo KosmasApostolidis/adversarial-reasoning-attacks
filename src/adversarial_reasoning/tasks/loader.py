@@ -1,16 +1,18 @@
 """Task/scenario loader. Reads configs/tasks.yaml; yields TaskSample tuples.
 
 Real dataset files (when present) live under ``data/<dataset>/<split>/``.
-When dataset files are missing, falls back to deterministic synthetic RGB
-images so smoke / CI can exercise the full pipeline without TCIA access.
+Synthetic fallback is **opt-in** (``allow_synthetic_fallback=True`` or
+``synthetic=True``) so partial / missing dataset shards do not silently
+inflate benchmark numbers — see ``load_task`` for the exact semantics.
 """
 
 from __future__ import annotations
 
 import hashlib
-from collections.abc import Iterator
-from dataclasses import dataclass
+from collections.abc import Iterator, Mapping
+from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import yaml
@@ -35,6 +37,7 @@ class TaskSample:
     sample_id: str
     image: Image.Image
     prompt: str
+    metadata: Mapping[str, Any] = field(default_factory=dict)
 
 
 def load_task_config(task_id: str, config_path: str | Path = "configs/tasks.yaml") -> dict:
@@ -145,6 +148,7 @@ def load_task(
     split: str = "dev",
     n: int | None = None,
     synthetic: bool = False,
+    allow_synthetic_fallback: bool = False,
     config_path: str | Path = "configs/tasks.yaml",
 ) -> Iterator[TaskSample]:
     """Yield TaskSample for a task + split.
@@ -154,7 +158,22 @@ def load_task(
     split : ``dev`` or ``test`` (any key under ``dataset_split`` in tasks.yaml).
     n : cap on samples; defaults to the config's ``dataset_split[split]``.
     synthetic : if True, skip disk lookup — always emit synthetic images.
+        Use only for smoke tests; metadata flags each sample so analysis
+        scripts can filter.
+    allow_synthetic_fallback : if True, silently pad missing real samples
+        with deterministic synthetic images and emit a WARN. Defaults to
+        False — the loader raises if the dataset returns fewer than
+        ``count`` images. Silent padding hid missing dataset shards in
+        published numbers, so the safe default is now to fail loud.
+
+    Raises
+    ------
+    RuntimeError
+        If ``synthetic=False`` and ``allow_synthetic_fallback=False`` and
+        the configured dataset returns fewer than ``count`` images.
     """
+    import sys
+
     cfg = load_task_config(task_id, config_path=config_path)
     prompt = cfg["prompt_template"].strip()
     dataset = cfg.get("dataset", "synthetic")
@@ -167,14 +186,39 @@ def load_task(
         real: list[tuple[str, Image.Image]] = []
     else:
         real = _dataset_images(dataset, split, count, cfg=cfg)
+        if len(real) < count and not allow_synthetic_fallback:
+            raise RuntimeError(
+                f"Dataset {dataset!r} returned {len(real)} samples for "
+                f"task={task_id!r} split={split!r} but {count} were requested. "
+                "Refusing to silently pad with synthetic images — pass "
+                "allow_synthetic_fallback=True (and accept the metadata "
+                "marker) or set synthetic=True for an explicit smoke test."
+            )
+        if len(real) < count:
+            print(
+                f"[load_task] WARN: padding {count - len(real)} synthetic "
+                f"samples for task={task_id!r} split={split!r}; results will "
+                "be marked synthetic=True in metadata.",
+                file=sys.stderr,
+                flush=True,
+            )
 
     for i in range(count):
         if i < len(real):
             sample_id, img = real[i]
+            yield TaskSample(
+                task_id=task_id, sample_id=sample_id, image=img, prompt=prompt
+            )
         else:
             img = _synthetic_image(seed=_stable_seed(task_id, split, i))
             sample_id = f"synthetic_{split}_{i:04d}"
-        yield TaskSample(task_id=task_id, sample_id=sample_id, image=img, prompt=prompt)
+            yield TaskSample(
+                task_id=task_id,
+                sample_id=sample_id,
+                image=img,
+                prompt=prompt,
+                metadata={"synthetic": True, "synthetic_reason": "padding"},
+            )
 
 
 def load_task_sample(

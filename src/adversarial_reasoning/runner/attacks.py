@@ -2,9 +2,16 @@
 
 Notes
 -----
-- ε is applied in the *processor-normalised* pixel domain (CLIP std ≈
-  0.27), so a pixel-domain ε of 8/255 corresponds to ~0.116 here.
-  Keeping it normalised matches the noise mode apples-to-apples.
+- ε is supplied by the caller in **pixel domain** (e.g. ``8/255``), the same
+  convention as :func:`perturb_noise`. ``run_gradient_attack`` rescales it
+  into the VLM preprocessor's normalised domain via
+  ``ε_norm = ε_pixel / vlm.pixel_std`` before constructing the attack.
+  ``vlm.pixel_std`` returns ``max(image_std)`` for HF processors and
+  ``max(_IMAGENET_STD)`` for InternVL2; the choice of ``max`` guarantees
+  the resulting L∞ ball stays *within* pixel-domain budget on every
+  channel (conservative). Pre-2026-05 builds applied the literal ε in
+  normalised space — ~3.6× too tight for CLIP-preprocessed VLMs,
+  invalidating reported success rates. Re-run any historical sweep.
 - Clip bounds [-3, 3] generously cover the normalised range.
 - Model-family extras (``image_grid_thw`` for Qwen, ``image_sizes``
   for LLaVA-Next, etc.) flow through ``prepare_attack_inputs`` ⇒
@@ -225,10 +232,21 @@ def _dispatch_attack(
     target_tool: str,
     target_step_k: int,
 ) -> Any:
-    """Build the attack for ``mode`` and run it against the prepared tensors."""
+    """Build the attack for ``mode`` and run it against the prepared tensors.
+
+    ``epsilon`` is supplied in pixel domain; rescaled to normalised domain
+    via ``vlm.pixel_std`` so the L∞ ball corresponds to the same physical
+    perturbation magnitude as :func:`perturb_noise`.
+    """
+    pixel_std = float(vlm.pixel_std)
+    if pixel_std <= 0.0:
+        raise ValueError(
+            f"vlm.pixel_std must be > 0 (got {pixel_std}); cannot rescale ε."
+        )
+    norm_epsilon = epsilon / pixel_std
     attack = build_attack(
         mode,
-        epsilon=epsilon,
+        epsilon=norm_epsilon,
         steps=steps,
         target_tool=target_tool,
         target_step_k=target_step_k,

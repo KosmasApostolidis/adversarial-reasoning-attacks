@@ -23,17 +23,25 @@ HF_MODELS=(
 
 for repo in "${HF_MODELS[@]}"; do
   echo "[download_models] HF snapshot: ${repo}"
-  python -c "
+  # Pass repo via env, not f-string interpolation — avoids shell quoting bugs
+  # and shell-injection footguns if HF_MODELS is ever populated from a file.
+  REPO="${repo}" HF_HOME_ARG="${HF_HOME}" python - <<'PY'
 import os, sys
 from huggingface_hub import snapshot_download
 from huggingface_hub.errors import GatedRepoError
-tok = os.environ.get('HF_TOKEN') or None
+
+repo = os.environ["REPO"]
+cache_dir = os.environ["HF_HOME_ARG"]
+tok = os.environ.get("HF_TOKEN") or None
 try:
-    snapshot_download(repo_id='${repo}', cache_dir='${HF_HOME}', token=tok)
-except GatedRepoError as e:
-    sys.stderr.write(f'[download_models] GATED: ${repo} — accept license at https://huggingface.co/${repo} then retry.\n')
+    snapshot_download(repo_id=repo, cache_dir=cache_dir, token=tok)
+except GatedRepoError:
+    sys.stderr.write(
+        f"[download_models] GATED: {repo} — accept license at "
+        f"https://huggingface.co/{repo} then retry.\n"
+    )
     sys.exit(1)
-"
+PY
 done
 
 # ---------- Ollama Q4 twins ----------
