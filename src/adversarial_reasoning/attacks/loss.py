@@ -61,6 +61,13 @@ def _logits_for_target(logits: torch.Tensor, t_prompt: int, t_target: int) -> to
     logits at ``[t_prompt - 1 : t_prompt - 1 + t_target]`` — NOT at the
     tail of the sequence.
     """
+    # t_prompt==0 produces an off-by-one slice: logits[:, -1:t_target-1] is
+    # an empty or wrong slice; the length check below would still pass.
+    if t_prompt < 1:
+        raise ValueError(
+            f"t_prompt must be >= 1 (got {t_prompt}); causal-LM slicing "
+            "requires at least one prompt token to score the first target."
+        )
     if logits.shape[1] < t_prompt + t_target:
         raise ValueError(
             f"Logits length {logits.shape[1]} < prompt+target length "
@@ -100,6 +107,11 @@ class TokenTargetLoss:
         return ce if self.targeted else -ce
 
 
+# Floor used when taking log of cached benign probabilities. Avoids -inf
+# when a vocab entry has p≈0; small enough not to perturb finite values.
+_LOG_PROB_FLOOR: float = 1e-12
+
+
 @dataclass
 class TrajectoryDriftLoss:
     """Negative KL divergence from cached benign next-token distribution.
@@ -109,12 +121,21 @@ class TrajectoryDriftLoss:
     reference (no_grad, detached). Returns ``-KL(attacked || benign)`` so
     an ascent step pushes the attacked distribution AWAY from benign.
 
+    The KL is computed manually as ``Σ p_attacked · (log p_attacked −
+    log p_benign)`` averaged over (B × T). PyTorch's ``F.kl_div(input,
+    target)`` computes ``KL(target || input)`` — i.e. the reverse
+    direction — and ``reduction="batchmean"`` divides by B only (not
+    B·T), so loss magnitude scales with target length and ε-sweeps
+    across tasks of different trajectory length are not comparable.
+    Both bugs (#review 2026-05-16) are fixed here.
+
     .. note::
         ``p_benign`` already lives on the same device as the model; the
         loop must not move it across devices between calls.
     """
 
     p_benign: torch.Tensor
+    log_p_benign: torch.Tensor
     t_prompt: int
     t_target: int
 
@@ -135,6 +156,7 @@ class TrajectoryDriftLoss:
             p_benign = log_benign.exp()
         return cls(
             p_benign=p_benign,
+            log_p_benign=log_benign,
             t_prompt=prompt_tokens.shape[-1],
             t_target=target.shape[-1],
         )
@@ -151,7 +173,11 @@ class TrajectoryDriftLoss:
         logits = vlm.forward_with_logits(perturbed_pixels, input_ids, **gen_kwargs)
         sliced = _logits_for_target(logits, self.t_prompt, self.t_target)
         log_attacked = F.log_softmax(sliced, dim=-1)
-        kl = F.kl_div(log_attacked, self.p_benign, reduction="batchmean")
+        p_attacked = log_attacked.exp()
+        # Manual KL(p_attacked || p_benign), token-averaged so loss is
+        # comparable across tasks with different target lengths.
+        kl_per_token = (p_attacked * (log_attacked - self.log_p_benign)).sum(dim=-1)
+        kl = kl_per_token.mean()  # mean over (B, T)
         return -kl  # ascent on -KL ⇒ KL diverges
 
 

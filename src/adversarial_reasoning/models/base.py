@@ -73,6 +73,22 @@ class VLMBase(ABC):
         """Model-specific image preprocessing (resize / normalize / patchify)."""
         raise NotImplementedError
 
+    @property
+    def pixel_std(self) -> float:
+        """L∞ scaling factor for converting pixel-domain ε to model-input ε.
+
+        Pixel-domain ε (e.g. ``8/255``) refers to perturbation magnitude on the
+        raw image in ``[0, 1]``. After the preprocessor normalises with
+        ``y = (x − μ) / σ``, the equivalent normalised-space L∞ bound is
+        ``ε / σ`` per channel. We return ``max(σ)`` so a single scalar ε
+        uniformly applied in the normalised domain stays *within* pixel
+        budget on every channel (conservative bound).
+
+        Backends that operate directly on pixel domain (e.g. Ollama with raw
+        bytes) leave the default ``1.0``. HF backends MUST override.
+        """
+        return 1.0
+
     def prepare_attack_inputs(
         self,
         image: Image.Image,

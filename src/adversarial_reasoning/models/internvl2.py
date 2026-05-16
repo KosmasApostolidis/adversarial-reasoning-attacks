@@ -24,6 +24,7 @@ from PIL import Image
 from torchvision.transforms.functional import InterpolationMode
 
 from ..types import AttackInputs
+from ._attention import _load_with_best_attention
 from .base import VLMBase, VLMGenerateResult
 
 _IMAGENET_MEAN = (0.485, 0.456, 0.406)
@@ -126,7 +127,23 @@ class InternVL2(VLMBase):
         max_tiles: int = 12,
         image_size: int = 448,
     ) -> None:
+        import os
+        import re
+        from pathlib import Path as _P
+
         from transformers import AutoModel, AutoTokenizer
+
+        # Defense in depth: InternVL3 ships custom modeling code that runs as
+        # arbitrary Python under ``trust_remote_code=True``. If the revision
+        # is not an immutable SHA we cannot audit *what* code runs — upstream
+        # can swap it between pulls. Refuse unless explicitly bypassed.
+        if not _P(hf_id).is_dir() and not re.fullmatch(r"[0-9a-fA-F]{40}", revision):
+            if os.environ.get("ADREASON_ALLOW_MUTABLE_HF_REVISION") != "1":
+                raise ValueError(
+                    f"InternVL2/3 uses trust_remote_code=True; remote revision "
+                    f"must be a 40-char SHA, got {revision!r} for {hf_id!r}. "
+                    "Set ADREASON_ALLOW_MUTABLE_HF_REVISION=1 for local dev only."
+                )
 
         self.model_id = hf_id
         self.max_tiles = max_tiles
@@ -137,7 +154,8 @@ class InternVL2(VLMBase):
             trust_remote_code=True,
             use_fast=False,
         )
-        self.model = AutoModel.from_pretrained(
+        self.model = _load_with_best_attention(
+            AutoModel,
             hf_id,
             torch_dtype=torch_dtype,
             device_map=device_map,
@@ -152,6 +170,9 @@ class InternVL2(VLMBase):
         self._img_context_token_id = self.tokenizer.convert_tokens_to_ids(_IMG_CONTEXT_TOKEN)
         self.model.img_context_token_id = self._img_context_token_id
         self._num_image_token = int(self.model.num_image_token)
+        # Cache once: ``next(self.model.parameters()).dtype`` iterates every
+        # call inside the PGD hot loop (forward × N_iter × N_restarts).
+        self._model_dtype = next(self.model.parameters()).dtype
 
     def preprocess_image(self, image: Image.Image) -> torch.Tensor:
         tiles = _dynamic_preprocess(
@@ -159,6 +180,11 @@ class InternVL2(VLMBase):
         )
         pixel_values = torch.stack([self._transform(t) for t in tiles])
         return pixel_values
+
+    @property
+    def pixel_std(self) -> float:
+        """Return ``max(_IMAGENET_STD)`` (~0.229) for pixel→norm ε scaling."""
+        return float(max(_IMAGENET_STD))
 
     def _format_prompt(self, prompt: str, tools_schema: list[dict] | None) -> str:
         """InternLM2-Chat conversation template with `<image>` placeholder.
@@ -229,7 +255,7 @@ class InternVL2(VLMBase):
 
         question = self._format_prompt(prompt, tools_schema)
         pixel_values = self.preprocess_image(image).to(
-            self.model.device, dtype=next(self.model.parameters()).dtype
+            self.model.device, dtype=self._model_dtype
         )
 
         gen_cfg = {
@@ -271,9 +297,8 @@ class InternVL2(VLMBase):
                 dtype=torch.long,
                 device=image_tensor.device,
             )
-        model_dtype = next(self.model.parameters()).dtype
         outputs = self.model(
-            pixel_values=image_tensor.to(model_dtype),
+            pixel_values=image_tensor.to(self._model_dtype),
             input_ids=input_ids,
             output_hidden_states=False,
             return_dict=True,
@@ -339,7 +364,7 @@ class InternVL2(VLMBase):
         """
         question = self._format_prompt(prompt, tools_schema)
         pixel_values = self.preprocess_image(image).to(
-            self.model.device, dtype=next(self.model.parameters()).dtype
+            self.model.device, dtype=self._model_dtype
         )
         num_patches = int(pixel_values.shape[0])
         query = self._build_query(question, num_patches=num_patches)

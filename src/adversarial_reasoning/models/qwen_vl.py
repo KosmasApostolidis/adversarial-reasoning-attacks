@@ -8,6 +8,7 @@ import torch
 from PIL import Image
 
 from ..types import AttackInputs
+from ._attention import _load_with_best_attention
 from .base import VLMBase, VLMGenerateResult
 
 _MIN_TEMP: float = 1e-5  # temperature floor for generation kwargs
@@ -35,7 +36,8 @@ class QwenVL(VLMBase):
         if not Path(hf_id).is_dir():
             from_pretrained_kwargs["revision"] = revision
         self.processor = AutoProcessor.from_pretrained(hf_id, **from_pretrained_kwargs)
-        self.model = AutoModelForVision2Seq.from_pretrained(
+        self.model = _load_with_best_attention(
+            AutoModelForVision2Seq,
             hf_id,
             torch_dtype=torch_dtype,
             device_map=device_map,
@@ -50,6 +52,12 @@ class QwenVL(VLMBase):
     def preprocess_image(self, image: Image.Image) -> Any:
         # Qwen2.5-VL processor expects PIL → tensor via the processor pipeline.
         return self.processor(images=image, return_tensors="pt")
+
+    @property
+    def pixel_std(self) -> float:
+        """Return ``max(processor.image_processor.image_std)`` for pixel→norm ε scaling."""
+        img_proc = getattr(self.processor, "image_processor", self.processor)
+        return float(max(img_proc.image_std))
 
     def _build_processor_inputs(
         self,

@@ -9,6 +9,7 @@ import torch
 from PIL import Image
 
 from ..types import AttackInputs
+from ._attention import _load_with_best_attention
 from .base import VLMBase, VLMGenerateResult
 
 _LOG = logging.getLogger(__name__)
@@ -35,7 +36,8 @@ class LlavaNext(VLMBase):
         if not _Path(hf_id).is_dir():
             from_pretrained_kwargs["revision"] = revision
         self.processor = AutoProcessor.from_pretrained(hf_id, **from_pretrained_kwargs)
-        self.model = AutoModelForVision2Seq.from_pretrained(
+        self.model = _load_with_best_attention(
+            AutoModelForVision2Seq,
             hf_id,
             torch_dtype=torch_dtype,
             device_map=device_map,
@@ -48,6 +50,12 @@ class LlavaNext(VLMBase):
 
     def preprocess_image(self, image: Image.Image) -> Any:
         return image
+
+    @property
+    def pixel_std(self) -> float:
+        """Return ``max(processor.image_processor.image_std)`` for pixel→norm ε scaling."""
+        img_proc = getattr(self.processor, "image_processor", self.processor)
+        return float(max(img_proc.image_std))
 
     def generate(
         self,
