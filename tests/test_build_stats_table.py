@@ -176,10 +176,14 @@ def _build_zero_delta_rows() -> list[dict]:
             for mode, name in [("noise", "noise"), ("pgd", "pgd_linf")]:
                 rows.append(
                     _record(
-                        model_key="m", task_id="t",
-                        attack_mode=mode, attack_name=name,
-                        epsilon=0.0157, seed=seed,
-                        sample_id=f"s{sample_idx}", edit_distance=0.1,
+                        model_key="m",
+                        task_id="t",
+                        attack_mode=mode,
+                        attack_name=name,
+                        epsilon=0.0157,
+                        seed=seed,
+                        sample_id=f"s{sample_idx}",
+                        edit_distance=0.1,
                     )
                 )
     return rows
@@ -366,10 +370,14 @@ def test_main_with_cot_out_writes_both_tables(tmp_path: Path) -> None:
     cot_out = tmp_path / "cot.tex"
     rc = bst.main(
         [
-            "--runs-dir", str(runs_dir),
-            "--out", str(main_out),
-            "--cot-out", str(cot_out),
-            "--n-resamples", "100",
+            "--runs-dir",
+            str(runs_dir),
+            "--out",
+            str(main_out),
+            "--cot-out",
+            str(cot_out),
+            "--n-resamples",
+            "100",
         ]
     )
     assert rc == 0

@@ -63,9 +63,7 @@ def _get_nli() -> tuple[Any, Any, str, int]:
     import torch
     from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
-    tokenizer = AutoTokenizer.from_pretrained(
-        NLI_MODEL_ID, revision=NLI_MODEL_REVISION
-    )
+    tokenizer = AutoTokenizer.from_pretrained(NLI_MODEL_ID, revision=NLI_MODEL_REVISION)
     model = AutoModelForSequenceClassification.from_pretrained(
         NLI_MODEL_ID, revision=NLI_MODEL_REVISION
     )
@@ -75,8 +73,7 @@ def _get_nli() -> tuple[Any, Any, str, int]:
     label2id = {label.lower(): idx for label, idx in model.config.label2id.items()}
     if "entailment" not in label2id:
         raise RuntimeError(
-            f"NLI model {NLI_MODEL_ID} has no 'entailment' label "
-            f"(found: {list(label2id)})"
+            f"NLI model {NLI_MODEL_ID} has no 'entailment' label (found: {list(label2id)})"
         )
     _NLI_CACHE.update(
         tokenizer=tokenizer,

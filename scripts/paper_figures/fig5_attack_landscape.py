@@ -30,9 +30,7 @@ def _compute_groups(
     return groups, pgd_q
 
 
-def _draw_violins(
-    ax, groups: list[tuple[str, np.ndarray, str]], positions: list[int]
-) -> None:
+def _draw_violins(ax, groups: list[tuple[str, np.ndarray, str]], positions: list[int]) -> None:
     parts = ax.violinplot(
         [g[1] for g in groups],
         positions=positions,
@@ -47,9 +45,7 @@ def _draw_violins(
     parts["cmedians"].set_linewidth(2.5)
 
 
-def _annotate_groups(
-    ax, groups: list[tuple[str, np.ndarray, str]], positions: list[int]
-) -> None:
+def _annotate_groups(ax, groups: list[tuple[str, np.ndarray, str]], positions: list[int]) -> None:
     rng = np.random.default_rng(7)
     for xi, (_label, arr, c) in zip(positions, groups, strict=False):
         jitter = rng.uniform(-0.07, 0.07, len(arr))

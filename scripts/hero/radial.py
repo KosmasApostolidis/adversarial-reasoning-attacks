@@ -51,11 +51,22 @@ def _compute_metrics(recs: list[dict]) -> list[float]:
 def _draw_grid_circles(ax) -> None:
     for r in [0.25, 0.5, 0.75, 1.0]:
         ax.plot(np.linspace(0, 2 * np.pi, 200), [r] * 200, color=GRID, linewidth=0.6, alpha=0.6)
-        ax.text(np.pi / 2, r, f"{r:.2f}", color=TEXT_MUTED, fontsize=7,
-                ha="center", va="center", alpha=0.55, zorder=2)
+        ax.text(
+            np.pi / 2,
+            r,
+            f"{r:.2f}",
+            color=TEXT_MUTED,
+            fontsize=7,
+            ha="center",
+            va="center",
+            alpha=0.55,
+            zorder=2,
+        )
 
 
-def _draw_radar_panel(ax, name: str, angles: np.ndarray, norm_row: np.ndarray, raw_row: list[float]) -> None:
+def _draw_radar_panel(
+    ax, name: str, angles: np.ndarray, norm_row: np.ndarray, raw_row: list[float]
+) -> None:
     ax.set_facecolor(BG)
     ax.set_theta_zero_location("N")
     ax.set_theta_direction(-1)
@@ -63,13 +74,30 @@ def _draw_radar_panel(ax, name: str, angles: np.ndarray, norm_row: np.ndarray, r
     _draw_grid_circles(ax)
 
     bar_w = 2 * np.pi / len(_METRIC_NAMES) * 0.72
-    ax.bar(angles, norm_row, width=bar_w, color=PALETTE[name], alpha=0.92,
-           edgecolor=BG, linewidth=1.6, zorder=3)
+    ax.bar(
+        angles,
+        norm_row,
+        width=bar_w,
+        color=PALETTE[name],
+        alpha=0.92,
+        edgecolor=BG,
+        linewidth=1.6,
+        zorder=3,
+    )
     for i_m, (ang, val_norm, val_raw) in enumerate(zip(angles, norm_row, raw_row, strict=True)):
         label = f"{val_raw:.0%}" if _METRIC_NAMES[i_m] == "FLIP" else f"{val_raw:.2f}"
-        ax.text(ang, max(val_norm + 0.10, 0.18), label, ha="center", va="center",
-                color=TEXT, fontsize=10, fontweight="bold",
-                family="DejaVu Sans Mono", zorder=5)
+        ax.text(
+            ang,
+            max(val_norm + 0.10, 0.18),
+            label,
+            ha="center",
+            va="center",
+            color=TEXT,
+            fontsize=10,
+            fontweight="bold",
+            family="DejaVu Sans Mono",
+            zorder=5,
+        )
 
     ax.set_xticks(angles)
     ax.set_xticklabels(_METRIC_NAMES, color=TEXT, fontsize=10.5, fontweight="bold")
@@ -87,23 +115,38 @@ def _draw_legend_panel(ax) -> None:
     add_panel(ax, 0.02, 0.02, 0.96, 0.96, fc=PANEL, ec=GRID, radius=0.05)
     ax.text(0.06, 0.86, "READING THE RADAR", color=TEXT, fontsize=15, fontweight="bold")
     ax.text(0.06, 0.78, "Each spoke is one metric.", color=TEXT_MUTED, fontsize=10)
-    ax.text(0.06, 0.71,
-            "Bar length = column-normalised score across\nall attacks (longer = stronger attack).",
-            color=TEXT_MUTED, fontsize=10)
+    ax.text(
+        0.06,
+        0.71,
+        "Bar length = column-normalised score across\nall attacks (longer = stronger attack).",
+        color=TEXT_MUTED,
+        fontsize=10,
+    )
     ax.text(0.06, 0.58, "METRICS", color=ACCENT, fontsize=11, fontweight="bold")
     for i, (k, v) in enumerate(_METRIC_HELP):
         ax.text(0.06, 0.49 - i * 0.075, k, color=TEXT, fontsize=9.5, fontweight="bold")
         ax.text(0.30, 0.49 - i * 0.075, v, color=TEXT_MUTED, fontsize=9.5)
-    ax.text(0.06, 0.06,
-            "Numbers shown above each bar are raw values\n(not normalised).",
-            color=TEXT_MUTED, fontsize=9, alpha=0.85, style="italic")
+    ax.text(
+        0.06,
+        0.06,
+        "Numbers shown above each bar are raw values\n(not normalised).",
+        color=TEXT_MUTED,
+        fontsize=9,
+        alpha=0.85,
+        style="italic",
+    )
 
 
 def _add_titles(fig) -> None:
     fig.text(0.5, 0.965, "ATTACK PROFILES", color=TEXT, fontsize=24, fontweight="bold", ha="center")
-    fig.text(0.5, 0.940,
-             "Five-axis radar per attack · column-normalised across attacks",
-             color=TEXT_MUTED, fontsize=11, ha="center")
+    fig.text(
+        0.5,
+        0.940,
+        "Five-axis radar per attack · column-normalised across attacks",
+        color=TEXT_MUTED,
+        fontsize=11,
+        ha="center",
+    )
 
 
 def fig_radial(by_attack, out_path: Path) -> None:

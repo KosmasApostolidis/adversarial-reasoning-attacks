@@ -84,11 +84,25 @@ def render(null_drifts: np.ndarray, attack_drifts: np.ndarray, out_path: Path) -
     fig, ax = plt.subplots(figsize=(8.5, 5.0))
     bins = np.linspace(0, 1, 41)
     if null_drifts.size:
-        ax.hist(null_drifts, bins=bins, color="#7A8499", alpha=0.85,
-                edgecolor="white", linewidth=0.4, label=f"null (n={null_drifts.size})")
+        ax.hist(
+            null_drifts,
+            bins=bins,
+            color="#7A8499",
+            alpha=0.85,
+            edgecolor="white",
+            linewidth=0.4,
+            label=f"null (n={null_drifts.size})",
+        )
     if attack_drifts.size:
-        ax.hist(attack_drifts, bins=bins, color="#FC8181", alpha=0.55,
-                edgecolor="white", linewidth=0.4, label=f"attack (n={attack_drifts.size})")
+        ax.hist(
+            attack_drifts,
+            bins=bins,
+            color="#FC8181",
+            alpha=0.55,
+            edgecolor="white",
+            linewidth=0.4,
+            label=f"attack (n={attack_drifts.size})",
+        )
     ax.set_xlabel("cot_drift_score (NLI distance)", fontsize=11)
     ax.set_ylabel("Count", fontsize=11)
     ax.set_title("CoT drift: null reseeds vs attacked runs", fontsize=12, pad=10)
@@ -97,8 +111,13 @@ def render(null_drifts: np.ndarray, attack_drifts: np.ndarray, out_path: Path) -
     if null_drifts.size:
         floor = float(np.quantile(null_drifts, 0.95))
         ax.axvline(floor, color="#5C6B82", linewidth=1.2, linestyle="--")
-        ax.text(floor + 0.01, ax.get_ylim()[1] * 0.85,
-                f"95%ile null = {floor:.3f}", color="#5C6B82", fontsize=9)
+        ax.text(
+            floor + 0.01,
+            ax.get_ylim()[1] * 0.85,
+            f"95%ile null = {floor:.3f}",
+            color="#5C6B82",
+            fontsize=9,
+        )
     plt.tight_layout()
     fig.savefig(out_path)
     plt.close(fig)
@@ -108,11 +127,13 @@ def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--records", type=Path, required=True)
     p.add_argument("--out", type=Path, required=True)
-    p.add_argument("--stub-nli", action="store_true",
-                   help="Use a constant 0.5 stub instead of DeBERTa.")
+    p.add_argument(
+        "--stub-nli", action="store_true", help="Use a constant 0.5 stub instead of DeBERTa."
+    )
     args = p.parse_args(argv)
 
     if args.stub_nli:
+
         def nli(premise: str, hypothesis: str) -> float:
             return 0.5
     else:

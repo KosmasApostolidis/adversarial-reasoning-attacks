@@ -58,7 +58,7 @@ def test_clean_cot_strips_tool_call_blob() -> None:
 
 
 def test_clean_cot_preserves_non_tool_braces() -> None:
-    text = 'The score formula is {a + b}. We compute it.'
+    text = "The score formula is {a + b}. We compute it."
     cleaned = clean_cot(text)
     assert "{a + b}" in cleaned
 

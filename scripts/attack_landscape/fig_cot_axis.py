@@ -30,20 +30,29 @@ def _plot_one_cot_attack(ax, name: str, recs: list[dict]) -> bool:
     ys_lo, ys_hi = ci[:, 0], ci[:, 1]
     if len(xs) == 1:
         ax.errorbar(
-            xs, ys_mean,
+            xs,
+            ys_mean,
             yerr=[ys_mean - ys_lo, ys_hi - ys_mean],
-            fmt="*", color=PALETTE[name],
-            markersize=18, markeredgecolor="white", markeredgewidth=1.0,
+            fmt="*",
+            color=PALETTE[name],
+            markersize=18,
+            markeredgecolor="white",
+            markeredgewidth=1.0,
             capsize=5,
             label=f"{LABELS[name]} (smoke only)",
         )
     else:
         ax.plot(
-            xs, ys_mean,
-            marker="o", color=PALETTE[name],
-            linewidth=2.5, markersize=8,
-            markeredgecolor="white", markeredgewidth=0.8,
-            label=LABELS[name], zorder=3,
+            xs,
+            ys_mean,
+            marker="o",
+            color=PALETTE[name],
+            linewidth=2.5,
+            markersize=8,
+            markeredgecolor="white",
+            markeredgewidth=0.8,
+            label=LABELS[name],
+            zorder=3,
         )
         ax.fill_between(xs, ys_lo, ys_hi, color=PALETTE[name], alpha=0.20, zorder=2)
     return True

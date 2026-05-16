@@ -147,8 +147,7 @@ def _render_delta_panel(
         ax,
         all_tools,
         pos,
-        highlight_tools=set(t for e in added for t in e)
-        | set(t for e in removed for t in e),
+        highlight_tools=set(t for e in added for t in e) | set(t for e in removed for t in e),
     )
     # Delta legend
     _add_delta_legend(ax, kept, removed, added)

@@ -55,6 +55,7 @@ _APGD_ETA_FLOOR: float = 1e-8
 
 _APGD_ETA_INIT_MULTIPLIER: float = 2.0  # η starts at multiplier × ε
 
+
 def _checkpoints(n_iter: int) -> list[int]:
     """Return APGD checkpoint iteration indices for ``n_iter`` total steps."""
     p = [0.0, _APGD_P1_INIT]
@@ -76,9 +77,7 @@ def _checkpoint_triggered(
 ) -> bool:
     """True when APGD step-size should halve (Croce & Hein 2020 §3.2)."""
     low_success = success_count < rho * window
-    eta_stuck = math.isclose(
-        eta, eta_at_last_ckpt, rel_tol=_APGD_ETA_CONVERGED_RTOL
-    )
+    eta_stuck = math.isclose(eta, eta_at_last_ckpt, rel_tol=_APGD_ETA_CONVERGED_RTOL)
     loss_stuck = not (loss_best < loss_at_last_ckpt - _APGD_LOSS_PROGRESS_TOL)
     return low_success or (eta_stuck and loss_stuck)
 
@@ -160,8 +159,15 @@ class APGDAttack(AttackBase):
         best: AttackResult | None = None
         for restart in range(self.random_restarts):
             candidate = self._one_restart(
-                vlm, x0, prompt_tokens, target,
-                loss_fn, gen_kwargs, checkpoints, step_sign, restart,
+                vlm,
+                x0,
+                prompt_tokens,
+                target,
+                loss_fn,
+                gen_kwargs,
+                checkpoints,
+                step_sign,
+                restart,
             )
             # ``_better_restart`` handles the NaN-locks-out-finite case that
             # ``a < b`` returns False for: a finite candidate strictly beats a
@@ -235,8 +241,16 @@ class APGDAttack(AttackBase):
         state = self._init_restart_state(x0)
         for step in range(self.steps):
             self._apgd_step(
-                vlm, x0, prompt_tokens, target, loss_fn, gen_kwargs,
-                state, step_sign, step, checkpoints,
+                vlm,
+                x0,
+                prompt_tokens,
+                target,
+                loss_fn,
+                gen_kwargs,
+                state,
+                step_sign,
+                step,
+                checkpoints,
             )
 
         perturbed = torch.clamp(state.x_best, self.clip_min, self.clip_max)
@@ -290,7 +304,12 @@ class APGDAttack(AttackBase):
 
         grad = torch.autograd.grad(loss, state.delta, retain_graph=False)[0]
         state.x_prev = self._apply_momentum_update(
-            x0, state.delta, grad, state.eta, state.x_prev, step_sign,
+            x0,
+            state.delta,
+            grad,
+            state.eta,
+            state.x_prev,
+            step_sign,
         )
         self._maybe_halve_step_size(state, x0, step, checkpoints)
 
@@ -333,9 +352,13 @@ class APGDAttack(AttackBase):
             checkpoints[state.ckpt_idx - 1] if state.ckpt_idx > 0 else 0
         )
         if _checkpoint_triggered(
-            state.success_count, window, self.rho,
-            state.eta, state.eta_at_last_ckpt,
-            state.loss_best, state.loss_at_last_ckpt,
+            state.success_count,
+            window,
+            self.rho,
+            state.eta,
+            state.eta_at_last_ckpt,
+            state.loss_best,
+            state.loss_at_last_ckpt,
         ):
             with torch.no_grad():
                 state.eta = max(state.eta / _APGD_ETA_INIT_MULTIPLIER, _APGD_ETA_FLOOR)

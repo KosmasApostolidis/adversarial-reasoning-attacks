@@ -55,8 +55,15 @@ def _draw_heatmap(ax, counts: np.ndarray, tools: list[str], fig):
         for j in range(n):
             v = counts[i, j]
             if v > 0:
-                ax.text(j, i, str(v), ha="center", va="center", fontsize=9,
-                        color="white" if v > vmax * 0.5 else "black")
+                ax.text(
+                    j,
+                    i,
+                    str(v),
+                    ha="center",
+                    va="center",
+                    fontsize=9,
+                    color="white" if v > vmax * 0.5 else "black",
+                )
     cb = fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
     cb.set_label("substitution count", fontsize=9)
 

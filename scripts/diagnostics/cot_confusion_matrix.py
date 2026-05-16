@@ -82,11 +82,26 @@ def render(cm: np.ndarray, threshold: float, out_path: Path) -> None:
         for j in range(2):
             v = cm[i, j]
             color = "white" if pct[i, j] > 0.4 else "black"
-            ax.text(j, i - 0.18, titles[i][j], ha="center", va="center",
-                    color=color, fontsize=10, fontweight="bold")
-            ax.text(j, i + 0.20, f"{v}  ({pct[i, j]:.1%})",
-                    ha="center", va="center", color=color, fontsize=11,
-                    family="DejaVu Sans Mono")
+            ax.text(
+                j,
+                i - 0.18,
+                titles[i][j],
+                ha="center",
+                va="center",
+                color=color,
+                fontsize=10,
+                fontweight="bold",
+            )
+            ax.text(
+                j,
+                i + 0.20,
+                f"{v}  ({pct[i, j]:.1%})",
+                ha="center",
+                va="center",
+                color=color,
+                fontsize=11,
+                family="DejaVu Sans Mono",
+            )
 
     ax.set_xticks(range(2))
     ax.set_xticklabels(labels_x, fontsize=11)
@@ -94,7 +109,8 @@ def render(cm: np.ndarray, threshold: float, out_path: Path) -> None:
     ax.set_yticklabels(labels_y, fontsize=11)
     ax.set_title(
         f"CoT vs tool-sequence corruption (drift threshold = {threshold:.2f})",
-        fontsize=12, pad=12,
+        fontsize=12,
+        pad=12,
     )
     cb = fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
     cb.set_label("Fraction of pairs", fontsize=10)
@@ -107,8 +123,12 @@ def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--records", type=Path, required=True)
     p.add_argument("--out", type=Path, required=True)
-    p.add_argument("--threshold", type=float, default=0.3,
-                   help="cot_drift_score threshold for 'drift' (default 0.3).")
+    p.add_argument(
+        "--threshold",
+        type=float,
+        default=0.3,
+        help="cot_drift_score threshold for 'drift' (default 0.3).",
+    )
     args = p.parse_args(argv)
 
     records = _load(args.records)
@@ -119,7 +139,8 @@ def main(argv: list[str] | None = None) -> int:
         f"[cot_confusion] cm=\n{cm}\n"
         f"  silent_corruption (no flip, drift) = {cm[1, 0]} / {cm.sum()} "
         f"= {cm[1, 0] / cm.sum():.1%}"
-        if cm.sum() else "[cot_confusion] no records with cot_drift_score"
+        if cm.sum()
+        else "[cot_confusion] no records with cot_drift_score"
     )
     return 0
 

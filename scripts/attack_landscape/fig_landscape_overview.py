@@ -124,9 +124,7 @@ def _draw_eps_one_attack(ax_eps, name: str, recs: list[dict]) -> None:
         ax_eps.fill_between(xs, ys_lo, ys_hi, color=PALETTE[name], alpha=0.18)
 
 
-def _render_eps_panel(
-    ax_eps, by_attack: dict[str, list[dict]], eps_vals: list[float]
-) -> None:
+def _render_eps_panel(ax_eps, by_attack: dict[str, list[dict]], eps_vals: list[float]) -> None:
     for name in ATTACK_ORDER:
         _draw_eps_one_attack(ax_eps, name, by_attack[name])
     ax_eps.set_xlabel("ε (normalised pixel domain)")

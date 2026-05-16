@@ -257,9 +257,7 @@ class InternVL2(VLMBase):
             torch.manual_seed(seed)
 
         question = self._format_prompt(prompt, tools_schema)
-        pixel_values = self.preprocess_image(image).to(
-            self.model.device, dtype=self._model_dtype
-        )
+        pixel_values = self.preprocess_image(image).to(self.model.device, dtype=self._model_dtype)
 
         gen_cfg = {
             "max_new_tokens": max_new_tokens,
@@ -366,9 +364,7 @@ class InternVL2(VLMBase):
         supported in the attack pipeline today).
         """
         question = self._format_prompt(prompt, tools_schema)
-        pixel_values = self.preprocess_image(image).to(
-            self.model.device, dtype=self._model_dtype
-        )
+        pixel_values = self.preprocess_image(image).to(self.model.device, dtype=self._model_dtype)
         num_patches = int(pixel_values.shape[0])
         query = self._build_query(question, num_patches=num_patches)
         tok = self.tokenizer(query, return_tensors="pt").to(self.model.device)

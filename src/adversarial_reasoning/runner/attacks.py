@@ -240,9 +240,7 @@ def _dispatch_attack(
     """
     pixel_std = float(vlm.pixel_std)
     if pixel_std <= 0.0:
-        raise ValueError(
-            f"vlm.pixel_std must be > 0 (got {pixel_std}); cannot rescale ε."
-        )
+        raise ValueError(f"vlm.pixel_std must be > 0 (got {pixel_std}); cannot rescale ε.")
     norm_epsilon = epsilon / pixel_std
     attack = build_attack(
         mode,

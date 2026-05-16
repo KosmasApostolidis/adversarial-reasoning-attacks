@@ -73,9 +73,7 @@ def _draw_alignment_edges(ax, b, a, max_len):
         if bt and at:
             _draw_alignment_edge(ax, by, ay, bt, at)
         elif bt and not at:
-            ax.text(
-                0.5, by, "✕", ha="center", va="center", fontsize=12, color="#8b949e", alpha=0.7
-            )
+            ax.text(0.5, by, "✕", ha="center", va="center", fontsize=12, color="#8b949e", alpha=0.7)
 
 
 def _draw_patient_panel(ax, rec):
@@ -93,9 +91,7 @@ def _draw_patient_panel(ax, rec):
     ax.set_ylim(-0.02, 1.12)
     ax.axis("off")
     pid = rec["sample_id"].split("_p")[1] if "_p" in rec["sample_id"] else rec["sample_id"]
-    ax.set_title(
-        f"P{pid}\ned={rec['edit_distance_norm']:.3f}", fontsize=9, color=DARK_FG, pad=4
-    )
+    ax.set_title(f"P{pid}\ned={rec['edit_distance_norm']:.3f}", fontsize=9, color=DARK_FG, pad=4)
 
 
 def _draw_legend_and_title(fig):

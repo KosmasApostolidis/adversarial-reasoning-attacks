@@ -112,6 +112,7 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 def main(argv: list[str] | None = None) -> int:
     args = _parse_args(argv)
     if args.stub_nli:
+
         def nli(p: str, h: str) -> float:
             return 0.5
     else:

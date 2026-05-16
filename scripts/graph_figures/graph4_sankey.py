@@ -211,9 +211,7 @@ def graph4_sankey() -> None:
 
     # Right column — fate boxes stacked
     {t: tool_y[t] for t in all_tools}
-    fate_entries = _build_fate_entries(
-        pgd_recs, all_tools, kept_ct, sub_ct, drop_ct, ins_ct
-    )
+    fate_entries = _build_fate_entries(pgd_recs, all_tools, kept_ct, sub_ct, drop_ct, ins_ct)
 
     # Draw Sankey flow arcs
     _draw_sankey_arcs(ax, fate_entries, tool_y)
