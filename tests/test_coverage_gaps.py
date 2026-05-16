@@ -141,7 +141,6 @@ def test_targeted_tool_pgd_stamps_metadata(monkeypatch: pytest.MonkeyPatch) -> N
         epsilon=0.02,
         steps=2,
         target_tool="custom_tool",
-        target_step_k=3,
     )
     out = attack.run(
         vlm=object(),
@@ -157,7 +156,6 @@ def test_targeted_tool_pgd_stamps_metadata(monkeypatch: pytest.MonkeyPatch) -> N
     # Metadata was stamped on the result.
     assert out.metadata["attack"] == "targeted_tool_pgd"
     assert out.metadata["target_tool"] == "custom_tool"
-    assert out.metadata["target_step_k"] == 3
 
 
 # --- agents/medical_agent.py — pure parsers + branch coverage --------------

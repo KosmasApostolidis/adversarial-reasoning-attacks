@@ -68,7 +68,6 @@ def build_attack(
     epsilon: float,
     steps: int,
     target_tool: str = "escalate_to_specialist",
-    target_step_k: int = 0,
     clip_min: float = -_ATK_CLIP_BOUND,
     clip_max: float = _ATK_CLIP_BOUND,
 ) -> AttackBase:
@@ -97,7 +96,6 @@ def build_attack(
             steps=steps,
             random_restarts=1,
             target_tool=target_tool,
-            target_step_k=target_step_k,
             clip_min=clip_min,
             clip_max=clip_max,
         )
@@ -182,7 +180,6 @@ def _reshape_and_reinfer(
     model_kwargs: dict[str, Any],
     mode: str,
     target_tool: str,
-    target_step_k: int,
 ) -> Any:  # Trajectory
     """Reshape perturbed tensor, re-run agent, attach attack metadata."""
     perturbed_pv = res.perturbed_image
@@ -204,7 +201,6 @@ def _reshape_and_reinfer(
     attacked.metadata[f"{mode}_steps"] = int(res.iterations)
     if mode == "targeted_tool":
         attacked.metadata["target_tool"] = target_tool
-        attacked.metadata["target_step_k"] = int(target_step_k)
         attacked.metadata["targeted_hit"] = int(target_tool in attacked.tool_sequence())
     return attacked
 
@@ -230,7 +226,6 @@ def _dispatch_attack(
     epsilon: float,
     steps: int,
     target_tool: str,
-    target_step_k: int,
 ) -> Any:
     """Build the attack for ``mode`` and run it against the prepared tensors.
 
@@ -247,7 +242,6 @@ def _dispatch_attack(
         epsilon=norm_epsilon,
         steps=steps,
         target_tool=target_tool,
-        target_step_k=target_step_k,
     )
     return attack.run(
         vlm=vlm,
@@ -271,7 +265,6 @@ def run_gradient_attack(
     max_steps: int,
     task_id: str,
     target_tool: str = "escalate_to_specialist",
-    target_step_k: int = 0,
 ) -> Trajectory:
     """Run a gradient attack then re-run the agent. See module docstring for details."""
     _check_gradient_attack_inputs(mode, vlm)
@@ -292,7 +285,6 @@ def run_gradient_attack(
         epsilon=epsilon,
         steps=steps,
         target_tool=target_tool,
-        target_step_k=target_step_k,
     )
     return _reshape_and_reinfer(
         res=res,
@@ -305,5 +297,4 @@ def run_gradient_attack(
         model_kwargs=model_kwargs,
         mode=mode,
         target_tool=target_tool,
-        target_step_k=target_step_k,
     )

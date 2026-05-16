@@ -307,7 +307,7 @@ vlm.prepare_attack_inputs(image, prompt) ──► {pixel_values, input_ids,
                                               image_grid_thw | image_sizes}
     │
     ▼
-build_attack(mode, ε, steps, target_tool, target_step_k)
+build_attack(mode, ε, steps, target_tool)
     │
     ▼
 attack.run(image=pixel_values, prompt_tokens, target,
@@ -342,7 +342,6 @@ Entry point: `python -m adversarial_reasoning.runner` ([`src/adversarial_reasoni
 | `--pgd-steps N` | 20 | PGD inner-loop step count (overridden by config) |
 | `--max-steps N` | 8 | agent rollout horizon |
 | `--target-tool NAME` | `escalate_to_specialist` | target tool for `targeted_tool` mode |
-| `--target-step-k K` | 0 | step index at which to enforce target tool |
 
 ### 6.7 JSONL record schema
 

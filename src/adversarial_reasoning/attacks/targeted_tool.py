@@ -1,7 +1,7 @@
-"""Targeted-Tool PGD — force a specific tool choice at step k.
+"""Targeted-Tool PGD — force a specific tool as the next tool call.
 
 Loss: CE forcing the target tool-name token sequence into the position
-``target_step_k`` of the trajectory. Reuses :class:`PGDAttack` with
+immediately following the prompt. Reuses :class:`PGDAttack` with
 ``targeted=True``; this module only handles tagging the result with the
 target-tool metadata so downstream metrics can group by it.
 
@@ -35,7 +35,6 @@ class TargetedToolPGD(AttackBase):
     random_restarts: int = 1
     targeted: bool = True
     target_tool: str = "escalate_to_specialist"
-    target_step_k: int = 0
     clip_min: float = 0.0
     clip_max: float = 1.0
     seed: int | None = None
@@ -69,5 +68,4 @@ class TargetedToolPGD(AttackBase):
         )
         result.metadata.setdefault("attack", self.name)
         result.metadata["target_tool"] = self.target_tool
-        result.metadata["target_step_k"] = self.target_step_k
         return result
