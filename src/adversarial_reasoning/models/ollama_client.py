@@ -19,11 +19,34 @@ except ImportError:  # pragma: no cover
     ollama = None  # type: ignore[assignment]
 
 
+_LOCAL_HOST_PREFIXES: tuple[str, ...] = (
+    "http://127.0.0.1",
+    "http://localhost",
+    "http://[::1]",
+)
+
+
+def _resolve_ollama_host() -> str:
+    """Read ``OLLAMA_HOST``; reject non-loopback unless ``OLLAMA_ALLOW_REMOTE=1``.
+
+    Defense against accidental SSRF or run-time pivoting of transfer
+    evaluation onto an arbitrary internal HTTP endpoint. Loopback is allowed
+    by default; remote hosts require an explicit opt-in env var.
+    """
+    host = os.environ.get("OLLAMA_HOST", "http://127.0.0.1:11434")
+    if any(host.startswith(p) for p in _LOCAL_HOST_PREFIXES):
+        return host
+    if os.environ.get("OLLAMA_ALLOW_REMOTE") == "1":
+        return host
+    raise ValueError(
+        f"OLLAMA_HOST={host!r} is not loopback. Set OLLAMA_ALLOW_REMOTE=1 "
+        "to allow remote Ollama endpoints (transfer eval to a trusted host)."
+    )
+
+
 @dataclass
 class OllamaSettings:
-    host: str = field(
-        default_factory=lambda: os.environ.get("OLLAMA_HOST", "http://127.0.0.1:11434")
-    )
+    host: str = field(default_factory=_resolve_ollama_host)
     request_timeout_s: float = 120.0
     max_retries: int = 3
 
