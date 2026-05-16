@@ -246,6 +246,4 @@ def main() -> None:
     kf = KFold(n_splits=N_CV_FOLDS, shuffle=True, random_state=args.random_seed)
     _save_cv_folds(args.out / "cv_folds", kf, idx_train, X_all, y_all)
 
-    _write_manifest(
-        args.out, pids, idx_train, idx_val, idx_test, X_all.shape[0], args.random_seed
-    )
+    _write_manifest(args.out, pids, idx_train, idx_val, idx_test, X_all.shape[0], args.random_seed)

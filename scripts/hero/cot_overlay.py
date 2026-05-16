@@ -80,23 +80,45 @@ def _draw_paired_bars(ax, x, width: float, attacks: list[str], stats: _PairedSta
         label="CoT drift (reasoning)",
     )
     ax.errorbar(
-        x - width / 2, stats.ed_means, yerr=[stats.ed_lo, stats.ed_hi],
-        fmt="none", ecolor=TEXT_MUTED, elinewidth=0.9, capsize=3,
+        x - width / 2,
+        stats.ed_means,
+        yerr=[stats.ed_lo, stats.ed_hi],
+        fmt="none",
+        ecolor=TEXT_MUTED,
+        elinewidth=0.9,
+        capsize=3,
     )
     ax.errorbar(
-        x + width / 2, stats.dr_means, yerr=[stats.dr_lo, stats.dr_hi],
-        fmt="none", ecolor=TEXT_MUTED, elinewidth=0.9, capsize=3,
+        x + width / 2,
+        stats.dr_means,
+        yerr=[stats.dr_lo, stats.dr_hi],
+        fmt="none",
+        ecolor=TEXT_MUTED,
+        elinewidth=0.9,
+        capsize=3,
     )
     return bars_ed, bars_dr
 
 
 def _annotate_bars(ax, bars_ed, bars_dr, stats: _PairedStats) -> None:
     for rect, val in zip(bars_ed, stats.ed_means, strict=True):
-        ax.text(rect.get_x() + rect.get_width() / 2, val + 0.015, f"{val:.2f}",
-                ha="center", color=TEXT, fontsize=9)
+        ax.text(
+            rect.get_x() + rect.get_width() / 2,
+            val + 0.015,
+            f"{val:.2f}",
+            ha="center",
+            color=TEXT,
+            fontsize=9,
+        )
     for rect, val in zip(bars_dr, stats.dr_means, strict=True):
-        ax.text(rect.get_x() + rect.get_width() / 2, val + 0.015, f"{val:.2f}",
-                ha="center", color=TEXT, fontsize=9)
+        ax.text(
+            rect.get_x() + rect.get_width() / 2,
+            val + 0.015,
+            f"{val:.2f}",
+            ha="center",
+            color=TEXT,
+            fontsize=9,
+        )
 
 
 def _decorate_axes_and_legend(ax, x, attacks: list[str]) -> None:
@@ -142,12 +164,16 @@ def fig_cot_overlay(by_attack, out_path: Path) -> None:
     _annotate_bars(ax, bars_ed, bars_dr, stats)
     _decorate_axes_and_legend(ax, x, attacks)
 
-    fig.text(0.06, 0.91, "TOOLS vs REASONING DISRUPTION", color=TEXT, fontsize=22, fontweight="bold")
     fig.text(
-        0.06, 0.875,
+        0.06, 0.91, "TOOLS vs REASONING DISRUPTION", color=TEXT, fontsize=22, fontweight="bold"
+    )
+    fig.text(
+        0.06,
+        0.875,
         "Tool-level edit distance (left, solid) vs CoT semantic drift (right, hatched). "
         "When the right bar is taller, the attack corrupts reasoning faster than it flips tools.",
-        color=TEXT_MUTED, fontsize=10.5,
+        color=TEXT_MUTED,
+        fontsize=10.5,
     )
 
     fig.savefig(out_path, facecolor=BG)

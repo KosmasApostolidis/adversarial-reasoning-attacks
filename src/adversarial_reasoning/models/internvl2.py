@@ -137,13 +137,16 @@ class InternVL2(VLMBase):
         # arbitrary Python under ``trust_remote_code=True``. If the revision
         # is not an immutable SHA we cannot audit *what* code runs — upstream
         # can swap it between pulls. Refuse unless explicitly bypassed.
-        if not _P(hf_id).is_dir() and not re.fullmatch(r"[0-9a-fA-F]{40}", revision):
-            if os.environ.get("ADREASON_ALLOW_MUTABLE_HF_REVISION") != "1":
-                raise ValueError(
-                    f"InternVL2/3 uses trust_remote_code=True; remote revision "
-                    f"must be a 40-char SHA, got {revision!r} for {hf_id!r}. "
-                    "Set ADREASON_ALLOW_MUTABLE_HF_REVISION=1 for local dev only."
-                )
+        if (
+            not _P(hf_id).is_dir()
+            and not re.fullmatch(r"[0-9a-fA-F]{40}", revision)
+            and os.environ.get("ADREASON_ALLOW_MUTABLE_HF_REVISION") != "1"
+        ):
+            raise ValueError(
+                f"InternVL2/3 uses trust_remote_code=True; remote revision "
+                f"must be a 40-char SHA, got {revision!r} for {hf_id!r}. "
+                "Set ADREASON_ALLOW_MUTABLE_HF_REVISION=1 for local dev only."
+            )
 
         self.model_id = hf_id
         self.max_tiles = max_tiles
@@ -254,9 +257,7 @@ class InternVL2(VLMBase):
             torch.manual_seed(seed)
 
         question = self._format_prompt(prompt, tools_schema)
-        pixel_values = self.preprocess_image(image).to(
-            self.model.device, dtype=self._model_dtype
-        )
+        pixel_values = self.preprocess_image(image).to(self.model.device, dtype=self._model_dtype)
 
         gen_cfg = {
             "max_new_tokens": max_new_tokens,
@@ -363,9 +364,7 @@ class InternVL2(VLMBase):
         supported in the attack pipeline today).
         """
         question = self._format_prompt(prompt, tools_schema)
-        pixel_values = self.preprocess_image(image).to(
-            self.model.device, dtype=self._model_dtype
-        )
+        pixel_values = self.preprocess_image(image).to(self.model.device, dtype=self._model_dtype)
         num_patches = int(pixel_values.shape[0])
         query = self._build_query(question, num_patches=num_patches)
         tok = self.tokenizer(query, return_tensors="pt").to(self.model.device)

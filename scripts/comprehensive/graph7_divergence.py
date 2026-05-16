@@ -49,9 +49,7 @@ def _draw_divergence_marker(ax, step, y, max_len, div_step, b, a):
             xmin=0.1,
             xmax=0.9,
         )
-        ax.text(
-            0.95, y + 0.5 / max_len, "⚡", fontsize=12, va="center", color=C_PGD, zorder=6
-        )
+        ax.text(0.95, y + 0.5 / max_len, "⚡", fontsize=12, va="center", color=C_PGD, zorder=6)
 
 
 def _draw_connection_lines(ax, step, y, max_len, b, a, div_step):
@@ -73,9 +71,7 @@ def _draw_patient_panel(ax, rec):
     a = rec["attacked"]["tool_sequence"]
     max_len = max(len(b), len(a))
 
-    div_step = next(
-        (i for i in range(min(len(b), len(a))) if b[i] != a[i]), min(len(b), len(a))
-    )
+    div_step = next((i for i in range(min(len(b), len(a))) if b[i] != a[i]), min(len(b), len(a)))
 
     for step in range(max_len):
         y = 1 - (step + 0.5) / max_len

@@ -135,8 +135,10 @@ def test_resolve_extends_no_extends_passthrough(tmp_path: Path) -> None:
     assert out == raw
 
 
-def test_legacy_loader_bypasses_schema(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """When _LEGACY_CONFIG_LOADER=1, unknown keys are silently dropped instead of failing."""
+def test_legacy_loader_env_no_longer_bypasses_schema(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """_LEGACY_CONFIG_LOADER bypass was removed — env var must be a no-op now."""
     p = tmp_path / "exp.yaml"
     p.write_text(
         textwrap.dedent(
@@ -151,8 +153,8 @@ def test_legacy_loader_bypasses_schema(tmp_path: Path, monkeypatch: pytest.Monke
         ).strip()
     )
     monkeypatch.setenv("_LEGACY_CONFIG_LOADER", "1")
-    cfg = load_runner_config(p)
-    assert cfg.name == "t"
+    with pytest.raises(ValidationError, match="extra_forbidden"):
+        load_runner_config(p)
 
 
 def test_strict_loader_rejects_unknown_key(tmp_path: Path) -> None:

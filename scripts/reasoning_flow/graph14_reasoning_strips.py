@@ -158,9 +158,7 @@ def _render_patient_block(
     # First divergence step vs benign
     b = rec["benign"]["tool_sequence"]
     a = rec["attacked"]["tool_sequence"]
-    div_step = next(
-        (i for i in range(min(len(b), len(a))) if b[i] != a[i]), min(len(b), len(a))
-    )
+    div_step = next((i for i in range(min(len(b), len(a))) if b[i] != a[i]), min(len(b), len(a)))
 
     for cond_label, (seq, cond_c, y_row) in seqs.items():
         _draw_condition_row(ax, cond_label, seq, cond_c, y_row, b, div_step, tool_color)

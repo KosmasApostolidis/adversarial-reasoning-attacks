@@ -206,9 +206,7 @@ def load_task(
     for i in range(count):
         if i < len(real):
             sample_id, img = real[i]
-            yield TaskSample(
-                task_id=task_id, sample_id=sample_id, image=img, prompt=prompt
-            )
+            yield TaskSample(task_id=task_id, sample_id=sample_id, image=img, prompt=prompt)
         else:
             img = _synthetic_image(seed=_stable_seed(task_id, split, i))
             sample_id = f"synthetic_{split}_{i:04d}"

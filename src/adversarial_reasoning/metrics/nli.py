@@ -63,9 +63,7 @@ def _get_nli() -> tuple[Any, Any, str, int]:
     import torch
     from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
-    tokenizer = AutoTokenizer.from_pretrained(
-        NLI_MODEL_ID, revision=NLI_MODEL_REVISION
-    )
+    tokenizer = AutoTokenizer.from_pretrained(NLI_MODEL_ID, revision=NLI_MODEL_REVISION)
     model = AutoModelForSequenceClassification.from_pretrained(
         NLI_MODEL_ID, revision=NLI_MODEL_REVISION
     )
@@ -75,8 +73,7 @@ def _get_nli() -> tuple[Any, Any, str, int]:
     label2id = {label.lower(): idx for label, idx in model.config.label2id.items()}
     if "entailment" not in label2id:
         raise RuntimeError(
-            f"NLI model {NLI_MODEL_ID} has no 'entailment' label "
-            f"(found: {list(label2id)})"
+            f"NLI model {NLI_MODEL_ID} has no 'entailment' label (found: {list(label2id)})"
         )
     _NLI_CACHE.update(
         tokenizer=tokenizer,
@@ -125,6 +122,6 @@ def entailment_probs(pairs: list[tuple[str, str]]) -> list[float]:
             ).to(device)
             logits = model(**inputs).logits
             probs = torch.softmax(logits, dim=-1)[:, entail_idx]
-            for (orig_i, _, _), p_val in zip(batch, probs.tolist()):
+            for (orig_i, _, _), p_val in zip(batch, probs.tolist(), strict=True):
                 out[orig_i] = float(p_val)
     return out

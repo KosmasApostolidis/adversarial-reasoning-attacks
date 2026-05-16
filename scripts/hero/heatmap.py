@@ -37,7 +37,9 @@ def _faith_drop(r: dict) -> float | None:
     return float(b) - float(a)
 
 
-def _build_cells(by_attack, value_fn, eps_vals: list[float], attacks: list[str]) -> tuple[np.ndarray, np.ndarray]:
+def _build_cells(
+    by_attack, value_fn, eps_vals: list[float], attacks: list[str]
+) -> tuple[np.ndarray, np.ndarray]:
     cell = np.full((len(attacks), len(eps_vals)), np.nan)
     counts = np.zeros_like(cell, dtype=int)
     for i, a in enumerate(attacks):
@@ -58,16 +60,40 @@ def _annotate_cells(ax, cell: np.ndarray, counts: np.ndarray, vmin: float, vmax:
     for i in range(cell.shape[0]):
         for j in range(cell.shape[1]):
             if np.isnan(cell[i, j]):
-                ax.text(j, i, "n/a", ha="center", va="center",
-                        color=TEXT_MUTED, fontsize=10, fontstyle="italic")
+                ax.text(
+                    j,
+                    i,
+                    "n/a",
+                    ha="center",
+                    va="center",
+                    color=TEXT_MUTED,
+                    fontsize=10,
+                    fontstyle="italic",
+                )
                 continue
             v = cell[i, j]
             color = "black" if v > (vmin + 0.65 * (vmax - vmin)) else TEXT
-            ax.text(j, i - 0.10, f"{v:.3f}", ha="center", va="center",
-                    color=color, fontsize=14, fontweight="bold",
-                    family="DejaVu Sans Mono")
-            ax.text(j, i + 0.22, f"n={counts[i, j]}", ha="center", va="center",
-                    color=color, fontsize=8.5, alpha=0.85)
+            ax.text(
+                j,
+                i - 0.10,
+                f"{v:.3f}",
+                ha="center",
+                va="center",
+                color=color,
+                fontsize=14,
+                fontweight="bold",
+                family="DejaVu Sans Mono",
+            )
+            ax.text(
+                j,
+                i + 0.22,
+                f"n={counts[i, j]}",
+                ha="center",
+                va="center",
+                color=color,
+                fontsize=8.5,
+                alpha=0.85,
+            )
 
 
 def _decorate_heatmap_axes(ax, eps_vals: list[float], attacks: list[str]) -> None:
@@ -91,9 +117,14 @@ def _add_colorbar(fig, im, cbar_label: str) -> None:
 def _add_titles(fig, title: str, subtitle: str) -> None:
     fig.text(0.06, 0.93, title, color=TEXT, fontsize=22, fontweight="bold")
     fig.text(0.06, 0.895, subtitle, color=TEXT_MUTED, fontsize=11)
-    fig.text(0.06, 0.05,
-             "PGD evaluated only at smoke ε=8/255 (n=5); other attacks span full sweep (4 ε × 3 seeds × 5 samples = 60).",
-             color=TEXT_MUTED, fontsize=9, alpha=0.85)
+    fig.text(
+        0.06,
+        0.05,
+        "PGD evaluated only at smoke ε=8/255 (n=5); other attacks span full sweep (4 ε × 3 seeds × 5 samples = 60).",
+        color=TEXT_MUTED,
+        fontsize=9,
+        alpha=0.85,
+    )
 
 
 def _render_heatmap(

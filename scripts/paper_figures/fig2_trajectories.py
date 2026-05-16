@@ -44,15 +44,25 @@ def _draw_sample_rows(
             )
             short = tool.replace("_", "\n")
             ax.text(
-                col + 0.46, row_i, short,
-                ha="center", va="center",
-                fontsize=6.5, color="white",
-                fontweight="bold", zorder=3,
+                col + 0.46,
+                row_i,
+                short,
+                ha="center",
+                va="center",
+                fontsize=6.5,
+                color="white",
+                fontweight="bold",
+                zorder=3,
             )
         ax.text(
-            -0.4, row_i, label,
-            ha="right", va="center",
-            fontsize=9, color=rc, fontweight="bold",
+            -0.4,
+            row_i,
+            label,
+            ha="right",
+            va="center",
+            fontsize=9,
+            color=rc,
+            fontweight="bold",
         )
 
 
@@ -69,7 +79,9 @@ def _decorate_sample_axes(
     n_ed = nr["edit_distance_norm"] if nr else float("nan")
     ax.set_title(
         f"Patient {pid}   |   edit dist: noise={n_ed:.3f}  PGD={pgd_ed:.3f}",
-        fontsize=10, loc="left", pad=5,
+        fontsize=10,
+        loc="left",
+        pad=5,
     )
     ax.spines[:].set_visible(False)
     ax.axhline(-0.5, color="#dddddd", linewidth=0.8)
@@ -96,9 +108,7 @@ def _render_one_patient_panel(
 
 
 def _draw_shared_legend(fig, pal: dict[str, str], all_tools: list[str]) -> None:
-    handles = [
-        mpl.patches.Patch(facecolor=pal[t], label=t.replace("_", " ")) for t in all_tools
-    ]
+    handles = [mpl.patches.Patch(facecolor=pal[t], label=t.replace("_", " ")) for t in all_tools]
     fig.legend(
         handles=handles,
         loc="lower center",

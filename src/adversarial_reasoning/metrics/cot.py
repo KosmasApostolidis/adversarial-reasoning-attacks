@@ -25,23 +25,34 @@ import re
 from collections.abc import Callable
 from typing import Any
 
+from .._text_utils import find_balanced_close as _find_balanced_close
+
 EntailmentFn = Callable[[str, str], float]
 
-REFUSAL_HYPOTHESIS = (
-    "The assistant declined to answer or refused to use medical tools."
-)
+REFUSAL_HYPOTHESIS = "The assistant declined to answer or refused to use medical tools."
 REFUSAL_THRESHOLD = 0.5
 
 _SENTENCE_SPLIT = re.compile(r"(?<=[.!?])\s+")
 _NUMBER_RE = re.compile(r"\b\d+(\.\d+)?\b")
 _CLINICAL_NOUNS = (
-    "patient", "biopsy", "lesion", "score", "guideline", "risk",
-    "tumor", "tumour", "psa", "mri", "ct", "ultrasound", "diagnosis",
-    "treatment", "imaging", "symptom", "finding",
+    "patient",
+    "biopsy",
+    "lesion",
+    "score",
+    "guideline",
+    "risk",
+    "tumor",
+    "tumour",
+    "psa",
+    "mri",
+    "ct",
+    "ultrasound",
+    "diagnosis",
+    "treatment",
+    "imaging",
+    "symptom",
+    "finding",
 )
-
-
-from .._text_utils import find_balanced_close as _find_balanced_close
 
 
 def clean_cot(text: str) -> str:

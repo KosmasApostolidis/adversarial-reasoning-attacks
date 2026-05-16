@@ -43,13 +43,19 @@ def _decorate_radar_axes(ax) -> None:
     ax.grid(color="#dddddd", linewidth=0.7)
     ax.set_title(
         "Attack profile across 5 metrics (column-normalised, larger = stronger attack)",
-        fontsize=12, pad=22, fontweight="bold",
+        fontsize=12,
+        pad=22,
+        fontweight="bold",
     )
     ax.legend(loc="upper right", bbox_to_anchor=(1.30, 1.10), frameon=False, fontsize=10)
 
 
 def fig_radar(by_attack: dict[str, list[dict]], out_path: Path) -> None:
-    raw = {n: _compute_metrics(n, by_attack) for n in ATTACK_ORDER if n != "pgd" or len(by_attack[n]) > 0}
+    raw = {
+        n: _compute_metrics(n, by_attack)
+        for n in ATTACK_ORDER
+        if n != "pgd" or len(by_attack[n]) > 0
+    }
     arr = np.array([raw[n] for n in raw])
     col_max = np.where(arr.max(axis=0) == 0, 1.0, arr.max(axis=0))
     norm = arr / col_max

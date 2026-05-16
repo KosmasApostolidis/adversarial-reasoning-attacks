@@ -53,5 +53,3 @@ def test_tool_schemas_are_json_serialisable():
     # Will raise TypeError if any non-JSON-serialisable content is present.
     json.dumps(schemas)
     assert len(schemas) == 6
-
-

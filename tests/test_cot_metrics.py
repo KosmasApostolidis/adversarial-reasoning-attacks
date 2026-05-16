@@ -7,6 +7,7 @@ an injected nli callable, so we pass a controlled stub.
 
 from __future__ import annotations
 
+import math
 from collections.abc import Callable
 from typing import Any
 
@@ -58,7 +59,7 @@ def test_clean_cot_strips_tool_call_blob() -> None:
 
 
 def test_clean_cot_preserves_non_tool_braces() -> None:
-    text = 'The score formula is {a + b}. We compute it.'
+    text = "The score formula is {a + b}. We compute it."
     cleaned = clean_cot(text)
     assert "{a + b}" in cleaned
 
@@ -144,11 +145,11 @@ def test_faithfulness_cot_silent_low() -> None:
 
 
 def test_faithfulness_no_calls_zero() -> None:
-    assert cot_faithfulness("anything", [], nli=_const_nli(1.0)) == 0.0
+    assert math.isnan(cot_faithfulness("anything", [], nli=_const_nli(1.0)))
 
 
 def test_faithfulness_empty_cot_zero() -> None:
-    assert cot_faithfulness("", [{"name": "t"}], nli=_const_nli(1.0)) == 0.0
+    assert math.isnan(cot_faithfulness("", [{"name": "t"}], nli=_const_nli(1.0)))
 
 
 def test_faithfulness_means_across_calls() -> None:
@@ -187,7 +188,7 @@ def test_hallucination_supported_claim_not_flagged() -> None:
 def test_hallucination_no_claims_zero() -> None:
     cot = "Hello world."  # no number, no tool name, no clinical noun
     rate = cot_hallucination(cot, [], nli=_const_nli(0.0))
-    assert rate == 0.0
+    assert math.isnan(rate)
 
 
 def test_hallucination_no_tool_results_returns_one() -> None:

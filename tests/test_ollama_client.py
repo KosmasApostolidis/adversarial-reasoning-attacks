@@ -24,6 +24,7 @@ def test_settings_host_default_factory_reads_env(
     """OllamaSettings.host must use default_factory so OLLAMA_HOST is read at
     instantiation time, not at import time (regression: see memory note)."""
     monkeypatch.setenv("OLLAMA_HOST", "http://example.com:9000")
+    monkeypatch.setenv("OLLAMA_ALLOW_REMOTE", "1")
     s = OllamaSettings()
     assert s.host == "http://example.com:9000"
 

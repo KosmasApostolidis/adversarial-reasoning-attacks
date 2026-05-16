@@ -14,8 +14,17 @@ from scripts.diagnostics.cot_null_distribution import (
 )
 
 
-def _row(*, attack="pgd", epsilon=0.0314, drift=None, ed=0.0, bts=None, ats=None,
-         benign_trace="", attacked_trace=""):
+def _row(
+    *,
+    attack="pgd",
+    epsilon=0.0314,
+    drift=None,
+    ed=0.0,
+    bts=None,
+    ats=None,
+    benign_trace="",
+    attacked_trace="",
+):
     return {
         "model_key": "qwen2_5_vl_7b",
         "task_id": "t",
@@ -58,11 +67,11 @@ def test_drift_threshold() -> None:
 
 def test_confusion_matrix_counts_each_quadrant() -> None:
     rows = [
-        _row(drift=0.0, ed=0.0, bts=["a"], ats=["a"]),       # robust
-        _row(drift=0.0, ed=0.5, bts=["a"], ats=["x"]),       # flip only
-        _row(drift=0.5, ed=0.0, bts=["a"], ats=["a"]),       # silent drift
-        _row(drift=0.5, ed=0.5, bts=["a"], ats=["x"]),       # both
-        _row(drift=0.5, ed=0.5, bts=["a"], ats=["x"]),       # both (dup)
+        _row(drift=0.0, ed=0.0, bts=["a"], ats=["a"]),  # robust
+        _row(drift=0.0, ed=0.5, bts=["a"], ats=["x"]),  # flip only
+        _row(drift=0.5, ed=0.0, bts=["a"], ats=["a"]),  # silent drift
+        _row(drift=0.5, ed=0.5, bts=["a"], ats=["x"]),  # both
+        _row(drift=0.5, ed=0.5, bts=["a"], ats=["x"]),  # both (dup)
     ]
     cm = confusion(rows, threshold=0.3)
     assert cm[0, 0] == 1  # robust

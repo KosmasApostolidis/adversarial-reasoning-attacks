@@ -51,14 +51,22 @@ def _draw_per_patient_bars(
     width = 0.35
     x = np.arange(len(qwen))
     ax.bar(
-        x - width / 2, qd, width,
-        label="Qwen2.5-VL", color="#4a7ab8",
-        edgecolor="black", linewidth=0.6,
+        x - width / 2,
+        qd,
+        width,
+        label="Qwen2.5-VL",
+        color="#4a7ab8",
+        edgecolor="black",
+        linewidth=0.6,
     )
     ax.bar(
-        x + width / 2, ld, width,
-        label="LLaVA-v1.6", color="#c89a3a",
-        edgecolor="black", linewidth=0.6,
+        x + width / 2,
+        ld,
+        width,
+        label="LLaVA-v1.6",
+        color="#c89a3a",
+        edgecolor="black",
+        linewidth=0.6,
     )
     ax.set_xticks(x)
     ax.set_xticklabels([r["sample_id"].split("_p")[1] for r in qwen], rotation=0, fontsize=9)

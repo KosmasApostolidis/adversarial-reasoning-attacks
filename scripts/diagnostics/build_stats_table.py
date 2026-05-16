@@ -177,9 +177,7 @@ COT_METRICS: tuple[tuple[str, MetricExtractor], ...] = (
 )
 
 
-def _safe_pvalue(
-    benign: np.ndarray, attacked: np.ndarray, cell_key: CellKey
-) -> tuple[float, str]:
+def _safe_pvalue(benign: np.ndarray, attacked: np.ndarray, cell_key: CellKey) -> tuple[float, str]:
     # Distinguish three p-value outcomes: clean compute (ok), scipy
     # raised ValueError (e.g. all-zero diffs), or scipy returned NaN.
     # All three previously collapsed to pvalue=1.0 silently.
@@ -389,8 +387,15 @@ def build_cot_table(
         return 1
 
     rows_by_metric: dict[str, list[dict]] = {
-        m: _build_cot_metric_rows(m, ex, attacked_records, n_resamples=n_resamples,
-                                   ci_level=ci_level, q=q, bootstrap_seed=bootstrap_seed)
+        m: _build_cot_metric_rows(
+            m,
+            ex,
+            attacked_records,
+            n_resamples=n_resamples,
+            ci_level=ci_level,
+            q=q,
+            bootstrap_seed=bootstrap_seed,
+        )
         for m, ex in COT_METRICS
     }
 
@@ -494,9 +499,7 @@ def main(argv: list[str] | None = None) -> int:
             bootstrap_seed=args.bootstrap_seed,
         )
         if cot_rc != 0:
-            sys.stderr.write(
-                "[build_stats_table] CoT table skipped (no CoT-enriched records)\n"
-            )
+            sys.stderr.write("[build_stats_table] CoT table skipped (no CoT-enriched records)\n")
     return rc
 
 

@@ -28,7 +28,9 @@ def _kde_density(xs: np.ndarray, vals: np.ndarray, bw: float = 0.06) -> np.ndarr
     return density
 
 
-def _draw_ridge_row(ax, xs: np.ndarray, name: str, vals: np.ndarray, y_base: float, z_order: float) -> None:
+def _draw_ridge_row(
+    ax, xs: np.ndarray, name: str, vals: np.ndarray, y_base: float, z_order: float
+) -> None:
     color = PALETTE[name]
     density = _kde_density(xs, vals)
     rgba_fill = to_rgba(color, alpha=0.55)
@@ -45,12 +47,29 @@ def _draw_ridge_row(ax, xs: np.ndarray, name: str, vals: np.ndarray, y_base: flo
     med = float(np.median(vals))
     mn = float(np.mean(vals))
     ax.plot([med, med], [y_base, y_base + 0.22], color=TEXT, linewidth=1.8, zorder=8)
-    ax.scatter([mn], [y_base], marker="D", s=70, color=ACCENT, edgecolor=BG, linewidth=1.0, zorder=9)
-    ax.text(-0.05, y_base + 0.06, LABELS[name], color=color, fontsize=12,
-            fontweight="bold", ha="left", va="bottom")
-    ax.text(1.05, y_base + 0.06, f"n={vals.size}  μ={mn:.3f}",
-            color=TEXT_MUTED, fontsize=10, ha="right", va="bottom",
-            family="DejaVu Sans Mono")
+    ax.scatter(
+        [mn], [y_base], marker="D", s=70, color=ACCENT, edgecolor=BG, linewidth=1.0, zorder=9
+    )
+    ax.text(
+        -0.05,
+        y_base + 0.06,
+        LABELS[name],
+        color=color,
+        fontsize=12,
+        fontweight="bold",
+        ha="left",
+        va="bottom",
+    )
+    ax.text(
+        1.05,
+        y_base + 0.06,
+        f"n={vals.size}  μ={mn:.3f}",
+        color=TEXT_MUTED,
+        fontsize=10,
+        ha="right",
+        va="bottom",
+        family="DejaVu Sans Mono",
+    )
 
 
 def _decorate_axes(ax, n_attacks: int, spacing: float) -> None:
@@ -67,12 +86,21 @@ def _decorate_axes(ax, n_attacks: int, spacing: float) -> None:
 
 def _add_titles(fig) -> None:
     fig.text(0.10, 0.945, "DISTRIBUTION SHAPES", color=TEXT, fontsize=24, fontweight="bold")
-    fig.text(0.10, 0.918,
-             "Kernel density estimate of edit-distance per attack · vertical tick = median · diamond = mean",
-             color=TEXT_MUTED, fontsize=11)
-    fig.text(0.10, 0.04,
-             "More mass near 1.0 = trajectory rewritten · more mass near 0 = agent unaffected",
-             color=TEXT_MUTED, fontsize=9.5, alpha=0.85)
+    fig.text(
+        0.10,
+        0.918,
+        "Kernel density estimate of edit-distance per attack · vertical tick = median · diamond = mean",
+        color=TEXT_MUTED,
+        fontsize=11,
+    )
+    fig.text(
+        0.10,
+        0.04,
+        "More mass near 1.0 = trajectory rewritten · more mass near 0 = agent unaffected",
+        color=TEXT_MUTED,
+        fontsize=9.5,
+        alpha=0.85,
+    )
 
 
 def fig_ridgeline(by_attack, out_path: Path) -> None:

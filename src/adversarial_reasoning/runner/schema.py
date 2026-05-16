@@ -40,9 +40,7 @@ class StatisticsBlock(BaseModel):
     def _correction_known(cls, v: str) -> str:
         allowed = {"none", "bonferroni", "holm", "bh", "benjamini_hochberg"}
         if v not in allowed:
-            raise ValueError(
-                f"multiple_comparison_correction={v!r} not in {sorted(allowed)}"
-            )
+            raise ValueError(f"multiple_comparison_correction={v!r} not in {sorted(allowed)}")
         return v
 
 

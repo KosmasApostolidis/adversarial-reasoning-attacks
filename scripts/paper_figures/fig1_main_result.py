@@ -65,9 +65,7 @@ def _draw_panel_a_box(ax, nd: np.ndarray, pd_: np.ndarray, eps: float) -> None:
     despine(ax)
 
 
-def _draw_panel_b_bars(
-    ax, pgd_recs: list[dict], nd: np.ndarray, pd_: np.ndarray
-) -> None:
+def _draw_panel_b_bars(ax, pgd_recs: list[dict], nd: np.ndarray, pd_: np.ndarray) -> None:
     n = len(pgd_recs)
     x = np.arange(n)
     w = 0.35
@@ -84,9 +82,7 @@ def _draw_panel_b_bars(
     despine(ax)
 
 
-def _draw_panel_c_eps(
-    ax, eps_sorted: list[float], means: list[float], stds: list[float]
-) -> None:
+def _draw_panel_c_eps(ax, eps_sorted: list[float], means: list[float], stds: list[float]) -> None:
     ax.errorbar(
         [e * 255 for e in eps_sorted],
         means,

@@ -25,9 +25,7 @@ from ._common import (
 def _circular_tool_layout(all_tools: list[str]) -> dict[str, tuple[float, float]]:
     n_tools = len(all_tools)
     angles = np.linspace(0, 2 * np.pi, n_tools, endpoint=False)
-    return {
-        t: (np.cos(a) * 1.0, np.sin(a) * 1.0) for t, a in zip(all_tools, angles, strict=False)
-    }
+    return {t: (np.cos(a) * 1.0, np.sin(a) * 1.0) for t, a in zip(all_tools, angles, strict=False)}
 
 
 def _draw_background_nodes(ax, all_tools: list[str], tool_pos: dict) -> None:
@@ -43,14 +41,10 @@ def _draw_background_nodes(ax, all_tools: list[str], tool_pos: dict) -> None:
             markeredgewidth=1,
             zorder=2,
         )
-        ax.text(
-            x, y, _s(t), ha="center", va="center", fontsize=6, color="#8b949e", zorder=3
-        )
+        ax.text(x, y, _s(t), ha="center", va="center", fontsize=6, color="#8b949e", zorder=3)
 
 
-def _draw_visited_nodes(
-    ax, seq: list[str], b_seq: list[str], tool_pos: dict, color: str
-) -> None:
+def _draw_visited_nodes(ax, seq: list[str], b_seq: list[str], tool_pos: dict, color: str) -> None:
     visited = set(seq)
     for t in visited:
         x, y = tool_pos[t]

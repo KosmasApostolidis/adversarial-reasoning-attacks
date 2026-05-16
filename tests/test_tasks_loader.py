@@ -129,7 +129,9 @@ def test_load_task_file_dataset_missing_dir_falls_back_to_synthetic(
 ) -> None:
     cfg = _write_tasks_yaml(tmp_path)
     monkeypatch.chdir(tmp_path)  # no data/file_dataset dir
-    samples = list(load_task("file_task", split="dev", config_path=cfg))
+    samples = list(
+        load_task("file_task", split="dev", config_path=cfg, allow_synthetic_fallback=True)
+    )
     assert len(samples) == 2
     # All synthetic since nothing on disk.
     assert samples[0].sample_id.startswith("synthetic_")
@@ -167,7 +169,9 @@ def test_load_task_bhi_missing_x_falls_back_to_synthetic(
     bhi_root = tmp_path / "cv_folds_empty"
     bhi_root.mkdir()
     monkeypatch.setenv("AR_PROSTATEX_BHI_ROOT", str(bhi_root))
-    samples = list(load_task("bhi_task", split="dev", config_path=cfg))
+    samples = list(
+        load_task("bhi_task", split="dev", config_path=cfg, allow_synthetic_fallback=True)
+    )
     # No on-disk files — should fully synthetic.
     assert len(samples) == 2
     assert all(s.sample_id.startswith("synthetic_") for s in samples)

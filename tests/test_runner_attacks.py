@@ -161,6 +161,8 @@ def _make_targeted_tool_stubs(captured, pv, input_ids, attn):
     from adversarial_reasoning.attacks.base import AttackResult
 
     class StubVLM:
+        pixel_std = 1.0
+
         def prepare_attack_inputs(self, image, prompt):
             return {
                 "pixel_values": pv,
@@ -203,6 +205,7 @@ def test_run_gradient_attack_full_path(
       - mode-specific metadata is written onto the attacked Trajectory
     """
     import torch
+
     from adversarial_reasoning.agents.base import Trajectory
     from adversarial_reasoning.runner import attacks as runner_attacks
 
@@ -250,6 +253,8 @@ def _make_reshape_stubs(captured, pv, input_ids):
     from adversarial_reasoning.attacks.base import AttackResult
 
     class StubVLM:
+        pixel_std = 1.0
+
         def prepare_attack_inputs(self, image, prompt):
             return {"pixel_values": pv, "input_ids": input_ids}
 

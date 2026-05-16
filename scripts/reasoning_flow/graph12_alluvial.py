@@ -11,9 +11,7 @@ from ._common import C_BENIGN, C_PGD, DARK_BG, DARK_FG, DARK_GRID, OUT, _load, _
 MAX_STEP = 8
 
 
-def _compute_occupancy(
-    pgd_r: list[dict], key: str, tool_y: dict, n_tools: int
-) -> np.ndarray:
+def _compute_occupancy(pgd_r: list[dict], key: str, tool_y: dict, n_tools: int) -> np.ndarray:
     occ = np.zeros((n_tools, MAX_STEP))
     for r in pgd_r:
         for step, tool in enumerate(r[key]["tool_sequence"][:MAX_STEP]):
@@ -171,9 +169,7 @@ def graph12_alluvial():
     for ax, (key, cond_label) in zip(
         axes, [("benign", "Benign"), ("attacked", "PGD-attacked")], strict=False
     ):
-        _render_alluvial_panel(
-            ax, pgd_r, key, cond_label, all_tools, tool_y, tool_color, N_PAT
-        )
+        _render_alluvial_panel(ax, pgd_r, key, cond_label, all_tools, tool_y, tool_color, N_PAT)
 
     _add_legend_and_suptitle(fig, all_tools, tool_color)
     fig.savefig(OUT / "graph12_alluvial.png", bbox_inches="tight", facecolor=DARK_BG, dpi=200)

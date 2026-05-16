@@ -157,12 +157,22 @@ def _draw_one_panel(
 ) -> None:
     b_heights, a_heights, b_errs, a_errs = heights_and_errs
     ax.bar(
-        [xi - bar_w / 2 for xi in x], b_heights, width=bar_w, yerr=b_errs,
-        capsize=3, color="#4c78a8", label="benign",
+        [xi - bar_w / 2 for xi in x],
+        b_heights,
+        width=bar_w,
+        yerr=b_errs,
+        capsize=3,
+        color="#4c78a8",
+        label="benign",
     )
     ax.bar(
-        [xi + bar_w / 2 for xi in x], a_heights, width=bar_w, yerr=a_errs,
-        capsize=3, color="#e45756", label="attacked",
+        [xi + bar_w / 2 for xi in x],
+        a_heights,
+        width=bar_w,
+        yerr=a_errs,
+        capsize=3,
+        color="#e45756",
+        label="attacked",
     )
     ax.set_xticks(x)
     ax.set_xticklabels(attacks, rotation=20, ha="right")
