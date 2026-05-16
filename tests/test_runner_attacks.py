@@ -161,6 +161,8 @@ def _make_targeted_tool_stubs(captured, pv, input_ids, attn):
     from adversarial_reasoning.attacks.base import AttackResult
 
     class StubVLM:
+        pixel_std = 1.0
+
         def prepare_attack_inputs(self, image, prompt):
             return {
                 "pixel_values": pv,
@@ -251,6 +253,8 @@ def _make_reshape_stubs(captured, pv, input_ids):
     from adversarial_reasoning.attacks.base import AttackResult
 
     class StubVLM:
+        pixel_std = 1.0
+
         def prepare_attack_inputs(self, image, prompt):
             return {"pixel_values": pv, "input_ids": input_ids}
 

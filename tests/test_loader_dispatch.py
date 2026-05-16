@@ -17,6 +17,12 @@ import pytest
 from adversarial_reasoning.models import loader as loader_mod
 
 
+@pytest.fixture(autouse=True)
+def _allow_mutable_revision(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Dispatch tests don't pin SHAs — bypass the supply-chain guard.
+    monkeypatch.setenv("ADREASON_ALLOW_MUTABLE_HF_REVISION", "1")
+
+
 def _write_models_yaml(tmp_path: Path) -> Path:
     p = tmp_path / "models.yaml"
     p.write_text(
