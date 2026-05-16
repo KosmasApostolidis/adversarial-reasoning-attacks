@@ -27,7 +27,6 @@ experiment:
       steps: [40]
       random_restarts: [1]
       target_tool: order_biopsy
-      target_step_k: 0
 
   statistics:
     test: wilcoxon_signed_rank

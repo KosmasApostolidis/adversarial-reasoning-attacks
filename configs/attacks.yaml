@@ -59,7 +59,6 @@ attacks:
       - order_biopsy
       - escalate_to_specialist
       - request_followup
-    target_step_k: 0             # force target at step k of trajectory
 
 # Loss-choice ablation (applied to PGD primary)
 loss_ablations:

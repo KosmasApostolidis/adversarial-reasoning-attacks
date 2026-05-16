@@ -74,10 +74,9 @@ def test_build_attack_dispatch(mode: str, cls: type) -> None:
 
 
 def test_build_attack_targeted_tool_passes_target() -> None:
-    a = build_attack("targeted_tool", epsilon=0.02, steps=5, target_tool="foo", target_step_k=2)
+    a = build_attack("targeted_tool", epsilon=0.02, steps=5, target_tool="foo")
     assert isinstance(a, TargetedToolPGD)
     assert a.target_tool == "foo"
-    assert a.target_step_k == 2
 
 
 def test_build_attack_unknown_mode_raises() -> None:
@@ -241,7 +240,6 @@ def test_run_gradient_attack_full_path(
     assert out.metadata["targeted_tool_loss_final"] == pytest.approx(0.5)
     assert out.metadata["targeted_tool_steps"] == 2
     assert out.metadata["target_tool"] == "escalate"
-    assert out.metadata["target_step_k"] == 0
     assert out.metadata["targeted_hit"] == 0  # stub agent has empty tool_sequence
 
 

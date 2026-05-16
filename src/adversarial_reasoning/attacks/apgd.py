@@ -310,6 +310,7 @@ class APGDAttack(AttackBase):
             state.eta,
             state.x_prev,
             step_sign,
+            step,
         )
         self._maybe_halve_step_size(state, x0, step, checkpoints)
 
@@ -321,16 +322,27 @@ class APGDAttack(AttackBase):
         eta: float,
         x_prev: torch.Tensor,
         step_sign: float,
+        step: int,
     ) -> torch.Tensor:
         with torch.no_grad():
             z = x0 + delta + step_sign * eta * grad.sign()
             z = torch.clamp(z, x0 - self.epsilon, x0 + self.epsilon)
             z = torch.clamp(z, self.clip_min, self.clip_max)
-            x_new = (
-                (x0 + delta)
-                + self.momentum * (z - (x0 + delta))
-                + (1.0 - self.momentum) * ((x0 + delta) - x_prev)
-            )
+            if step == 0:
+                # Croce & Hein 2020 §3.2 Algorithm 1 line 6: pure sign-SGD
+                # at k=0; the heavy-ball momentum recurrence only kicks in
+                # at k>=1. Prior code applied the momentum mix
+                # unconditionally; combined with ``x_prev == x_curr`` at
+                # init, that muted the step-0 update by factor `momentum`
+                # (=0.75 by default), so APGD effectively took a 0.75·η
+                # first step instead of the prescribed η.
+                x_new = z
+            else:
+                x_new = (
+                    (x0 + delta)
+                    + self.momentum * (z - (x0 + delta))
+                    + (1.0 - self.momentum) * ((x0 + delta) - x_prev)
+                )
             x_new = torch.clamp(x_new, x0 - self.epsilon, x0 + self.epsilon)
             x_new = torch.clamp(x_new, self.clip_min, self.clip_max)
             new_x_prev = (x0 + delta).detach().clone()

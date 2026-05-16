@@ -56,7 +56,6 @@ def _build_arg_parser() -> argparse.ArgumentParser:
     p.add_argument("--max-steps", type=int, default=8)
     p.add_argument("--pgd-steps", type=int, default=20, help="Gradient-attack inner steps")
     p.add_argument("--target-tool", default="escalate_to_specialist", help="targeted_tool target")
-    p.add_argument("--target-step-k", type=int, default=0, help="targeted_tool step index")
     p.add_argument(
         "--overwrite",
         action="store_true",
@@ -118,7 +117,6 @@ def _invoke_attack(
             max_steps=args.max_steps,
             task_id=task_id,
             target_tool=args.target_tool,
-            target_step_k=args.target_step_k,
         )
     adv_img = perturb(mode, sample.image, epsilon, seed)
     return agent.run(

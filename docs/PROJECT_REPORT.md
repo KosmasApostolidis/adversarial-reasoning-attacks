@@ -160,7 +160,7 @@ vlm.prepare_attack_inputs(image, prompt) ──► {pixel_values, input_ids,
                                               image_grid_thw | image_sizes}
     │
     ▼
-build_attack(mode, ε, steps, target_tool, target_step_k)
+build_attack(mode, ε, steps, target_tool)
     │
     ▼
 attack.run(image=pixel_values, prompt_tokens, target,

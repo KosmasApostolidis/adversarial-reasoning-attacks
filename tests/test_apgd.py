@@ -295,3 +295,72 @@ def test_apgd_accepts_4d_input_image() -> None:
     target = torch.tensor([[1]], dtype=torch.long)
     result = APGDAttack(epsilon=_LINF_EPSILON_4, steps=5).run(vlm, image, prompt, target)
     assert result.delta.abs().max().item() <= _LINF_EPSILON_4 + 1e-6
+
+
+# ---------------------- C5 regression: step-0 pure sign-SGD ------------
+
+
+class TestApgdStepZeroPureSignSgd:
+    """Croce & Hein 2020 §3.2 Algorithm 1 prescribes pure sign-SGD at k=0;
+    heavy-ball momentum starts at k>=1. Prior implementation applied the
+    momentum mix unconditionally — combined with ``x_prev == x_curr`` at
+    init, this muted the step-0 update by factor ``momentum`` (=0.75 by
+    default), so APGD effectively took only 75% of the prescribed first
+    step. These tests pin the corrected behavior.
+    """
+
+    @staticmethod
+    def _attack_with_known_eta() -> APGDAttack:
+        # ε large enough that no clipping fires for the η-magnitude step
+        # we construct below; clip range wide enough to keep z = x0 + (±η)
+        # away from [clip_min, clip_max] boundaries.
+        return APGDAttack(
+            epsilon=0.1,
+            momentum=0.75,
+            clip_min=-1.0,
+            clip_max=1.0,
+        )
+
+    def test_step_zero_is_pure_sign_sgd_magnitude(self) -> None:
+        attack = self._attack_with_known_eta()
+        x0 = torch.zeros(1, 3, 4, 4)
+        delta = torch.zeros_like(x0)
+        grad = torch.ones_like(x0)  # sign(grad) = +1 everywhere
+        eta = 0.1
+        x_prev = (x0 + delta).clone()  # init convention: x_prev == current
+
+        # Descent (step_sign=-1) ⇒ z = -η = -0.1.
+        # Step 0 must equal z (no momentum mix).
+        attack._apply_momentum_update(
+            x0, delta, grad, eta, x_prev, step_sign=-1.0, step=0
+        )
+        expected = -eta * torch.ones_like(delta)
+        assert torch.allclose(delta, expected, atol=1e-6), (
+            f"step=0 must take full η step; got abs(delta).max()={delta.abs().max():.6f}, "
+            f"expected {eta:.6f}"
+        )
+
+    def test_step_one_applies_momentum_when_x_prev_equals_current(self) -> None:
+        """At step>=1, the muted-by-momentum update remains in effect when
+        ``x_prev == x_curr`` (the trajectory just started accumulating).
+        This is the algorithm's intended behavior past k=0 — the test pins
+        that we did NOT collapse momentum into pure sign-SGD at every step.
+        """
+        attack = self._attack_with_known_eta()
+        x0 = torch.zeros(1, 3, 4, 4)
+        delta = torch.zeros_like(x0)
+        grad = torch.ones_like(x0)
+        eta = 0.1
+        x_prev = (x0 + delta).clone()
+
+        attack._apply_momentum_update(
+            x0, delta, grad, eta, x_prev, step_sign=-1.0, step=1
+        )
+        # x_new = (x_curr) + α·(z - x_curr) + (1-α)·(x_curr - x_prev)
+        #       = 0 + 0.75·(-0.1 - 0) + 0.25·(0 - 0) = -0.075
+        expected = -attack.momentum * eta * torch.ones_like(delta)
+        assert torch.allclose(delta, expected, atol=1e-6), (
+            f"step=1 with x_prev==current must mute step by `momentum`; "
+            f"got abs(delta).max()={delta.abs().max():.6f}, expected {attack.momentum * eta:.6f}"
+        )
+
